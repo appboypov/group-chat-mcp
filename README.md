@@ -12,8 +12,20 @@ Multi-agent communication server using the Model Context Protocol. Enables AI ag
 
 ## Installation
 
+### From npm
+
 ```bash
 npm install -g group-chat-mcp
+```
+
+### From source
+
+```bash
+git clone https://github.com/appboypov/group-chat-mcp.git
+cd group-chat-mcp
+npm install
+npm run build
+npm install -g .
 ```
 
 ## Setup
@@ -36,9 +48,19 @@ To remove the configuration:
 gchat uninstall
 ```
 
+### Enable channel notifications
+
+Channel notifications allow agents to receive messages in real-time as they arrive. For Claude Code, start your session with:
+
+```bash
+claude --dangerously-load-development-channels server:group-chat-mcp
+```
+
+Without this flag, agents can still read messages by calling `get_conversation`, but incoming messages will not be injected into the conversation automatically.
+
 ## Usage
 
-After running `gchat install`, the MCP server starts automatically when your IDE launches a session. Each session:
+After setup, the MCP server starts automatically when your IDE launches a session. Each session:
 
 1. Generates a unique agent ID
 2. Registers the agent in the shared state
