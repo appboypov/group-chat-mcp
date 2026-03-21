@@ -2,6 +2,10 @@
   "name": "group-chat-mcp",
   "version": "0.1.1",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/appboypov/group-chat-mcp"
+  },
   "main": "dist/index.js",
   "bin": {
     "gchat": "dist/gchat.js"
