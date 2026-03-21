@@ -187,7 +187,7 @@ Returns pending notifications or `"No new notifications."` if the inbox is empty
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | GC_PROJECT_PATH | No | `process.cwd()` | Override the project directory path (must be an absolute path) |
-| GC_POLL_INTERVAL_MS | No | `2000` | Inbox polling interval in milliseconds |
+| GC_POLL_INTERVAL_MS | No | `2000` (`5000` for Cursor) | Inbox polling interval in milliseconds. The Cursor installer sets this to `5000` via the mcp.json env block. |
 | GC_CLIENT_TYPE | No | — | Set to `"cursor"` to disable the push-based inbox poller (set automatically by the Cursor installer) |
 
 ## License
