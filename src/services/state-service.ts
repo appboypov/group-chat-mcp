@@ -8,19 +8,27 @@ import {
   MESSAGES_DIR,
   INBOXES_DIR,
 } from '../constants/storage.js';
-import {
+import { ConversationType } from '../enums/conversation-type.js';
+import { MessageType } from '../enums/message-type.js';
+import { NotificationType } from '../enums/notification-type.js';
+import type {
   Agent,
   ProfileUpdate,
   Conversation,
-  ConversationType,
   CreateConversationParams,
   Message,
-  MessageType,
   Notification,
-  NotificationType,
 } from '../types/index.js';
 import { readJsonFile, writeJsonFile, appendToJsonArray } from '../utils/file-utils.js';
 import { withFileLock } from '../utils/file-lock.js';
+
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function validateUuid(id: string): void {
+  if (!UUID_V4_REGEX.test(id)) {
+    throw new Error(`Invalid UUID: ${id}`);
+  }
+}
 
 export class StateService {
   private readonly storagePath: string;
@@ -43,12 +51,22 @@ export class StateService {
     return path.join(this.storagePath, CONVERSATIONS_FILE);
   }
 
+  private stateLockPath(): string {
+    return path.join(this.storagePath, 'state.lock');
+  }
+
   private messagesPath(conversationId: string): string {
+    validateUuid(conversationId);
     return path.join(this.storagePath, MESSAGES_DIR, `${conversationId}.json`);
   }
 
   private inboxPath(agentId: string): string {
+    validateUuid(agentId);
     return path.join(this.storagePath, INBOXES_DIR, `${agentId}.json`);
+  }
+
+  private withStateLock<T>(fn: () => Promise<T>): Promise<T> {
+    return withFileLock(this.stateLockPath(), fn);
   }
 
   // --- Public Getters ---
@@ -107,16 +125,27 @@ export class StateService {
   }
 
   async unregisterAgent(agentId: string): Promise<void> {
-    const agent = await this.getAgent(agentId);
-    if (!agent) return;
-
-    for (const conversationId of [...agent.conversations]) {
-      await this.leaveConversation(agentId, conversationId);
-    }
-
-    await withFileLock(this.agentsPath(), async () => {
+    await this.withStateLock(async () => {
       const agents = await this.getAgents();
-      const filtered = agents.filter((a) => a.id !== agentId);
+      const agent = agents.find((a) => a.id === agentId);
+      if (!agent) return;
+
+      for (const conversationId of [...agent.conversations]) {
+        const conversations = await this.readConversations();
+        const conversation = conversations.find((c) => c.id === conversationId);
+        if (!conversation) continue;
+
+        conversation.participants = conversation.participants.filter((p) => p !== agentId);
+        if (conversation.participants.length === 0) {
+          conversation.archivedAt = Date.now();
+        }
+        await writeJsonFile(this.conversationsPath(), conversations);
+
+        agent.conversations = agent.conversations.filter((c) => c !== conversationId);
+      }
+
+      const freshAgents = await this.getAgents();
+      const filtered = freshAgents.filter((a) => a.id !== agentId);
       await writeJsonFile(this.agentsPath(), filtered);
     });
   }
@@ -135,16 +164,14 @@ export class StateService {
   }
 
   async createConversation(params: CreateConversationParams): Promise<Conversation> {
-    const conversation = this.buildConversation(params);
+    return this.withStateLock(async () => {
+      const conversation = this.buildConversation(params);
 
-    await withFileLock(this.conversationsPath(), async () => {
       const conversations = await this.readConversations();
       conversations.push(conversation);
       await writeJsonFile(this.conversationsPath(), conversations);
-    });
 
-    if (params.participants.length > 0) {
-      await withFileLock(this.agentsPath(), async () => {
+      if (params.participants.length > 0) {
         const agents = await this.getAgents();
         for (const participantId of params.participants) {
           const agent = agents.find((a) => a.id === participantId);
@@ -153,14 +180,14 @@ export class StateService {
           }
         }
         await writeJsonFile(this.agentsPath(), agents);
-      });
-    }
+      }
 
-    return conversation;
+      return conversation;
+    });
   }
 
   async getOrCreateProjectConversation(projectPath: string): Promise<Conversation> {
-    return withFileLock(this.conversationsPath(), async () => {
+    return this.withStateLock(async () => {
       const conversations = await this.readConversations();
       const active = conversations.find(
         (c) =>
@@ -182,10 +209,7 @@ export class StateService {
   }
 
   async getOrCreateDmConversation(agentId1: string, agentId2: string): Promise<Conversation> {
-    let conversation: Conversation | undefined;
-    let created = false;
-
-    await withFileLock(this.conversationsPath(), async () => {
+    return this.withStateLock(async () => {
       const conversations = await this.readConversations();
       const existing = conversations.find(
         (c) =>
@@ -195,38 +219,30 @@ export class StateService {
           c.participants.includes(agentId1) &&
           c.participants.includes(agentId2),
       );
-      if (existing) {
-        conversation = existing;
-        return;
-      }
+      if (existing) return existing;
 
-      conversation = this.buildConversation({
+      const conversation = this.buildConversation({
         type: ConversationType.Dm,
         participants: [agentId1, agentId2],
       });
       conversations.push(conversation);
       await writeJsonFile(this.conversationsPath(), conversations);
-      created = true;
-    });
 
-    if (created) {
-      await withFileLock(this.agentsPath(), async () => {
-        const agents = await this.getAgents();
-        for (const participantId of conversation!.participants) {
-          const agent = agents.find((a) => a.id === participantId);
-          if (agent && !agent.conversations.includes(conversation!.id)) {
-            agent.conversations.push(conversation!.id);
-          }
+      const agents = await this.getAgents();
+      for (const participantId of conversation.participants) {
+        const agent = agents.find((a) => a.id === participantId);
+        if (agent && !agent.conversations.includes(conversation.id)) {
+          agent.conversations.push(conversation.id);
         }
-        await writeJsonFile(this.agentsPath(), agents);
-      });
-    }
+      }
+      await writeJsonFile(this.agentsPath(), agents);
 
-    return conversation!;
+      return conversation;
+    });
   }
 
   async joinConversation(agentId: string, conversationId: string): Promise<void> {
-    await withFileLock(this.conversationsPath(), async () => {
+    await this.withStateLock(async () => {
       const conversations = await this.readConversations();
       const conversation = conversations.find((c) => c.id === conversationId);
       if (!conversation) {
@@ -236,9 +252,7 @@ export class StateService {
         conversation.participants.push(agentId);
       }
       await writeJsonFile(this.conversationsPath(), conversations);
-    });
 
-    await withFileLock(this.agentsPath(), async () => {
       const agents = await this.getAgents();
       const agent = agents.find((a) => a.id === agentId);
       if (agent && !agent.conversations.includes(conversationId)) {
@@ -249,7 +263,7 @@ export class StateService {
   }
 
   async leaveConversation(agentId: string, conversationId: string): Promise<void> {
-    await withFileLock(this.conversationsPath(), async () => {
+    await this.withStateLock(async () => {
       const conversations = await this.readConversations();
       const conversation = conversations.find((c) => c.id === conversationId);
       if (!conversation) return;
@@ -259,9 +273,7 @@ export class StateService {
         conversation.archivedAt = Date.now();
       }
       await writeJsonFile(this.conversationsPath(), conversations);
-    });
 
-    await withFileLock(this.agentsPath(), async () => {
       const agents = await this.getAgents();
       const agent = agents.find((a) => a.id === agentId);
       if (agent) {
@@ -294,7 +306,9 @@ export class StateService {
     content: string,
     type: 'message' | 'system',
   ): Promise<Message> {
-    const conversation = await this.getConversation(conversationId);
+    const conversation = await withFileLock(this.conversationsPath(), async () => {
+      return this.getConversation(conversationId);
+    });
     if (!conversation) {
       throw new Error(`Conversation ${conversationId} not found`);
     }

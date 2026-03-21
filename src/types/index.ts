@@ -1,4 +1,7 @@
-export { Agent, Profile, ProfileUpdate } from './agent.js';
-export { Conversation, ConversationType, CreateConversationParams } from './conversation.js';
-export { Message, MessageType } from './message.js';
-export { Notification, NotificationType } from './notification.js';
+export { Agent } from './agent.js';
+export { Profile } from './profile.js';
+export { ProfileUpdate } from './profile-update.js';
+export { Conversation } from './conversation.js';
+export { CreateConversationParams } from './create-conversation-params.js';
+export { Message } from './message.js';
+export { Notification } from './notification.js';

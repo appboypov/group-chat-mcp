@@ -1,9 +1,4 @@
-export enum NotificationType {
-  Message = 'message',
-  Join = 'join',
-  Leave = 'leave',
-  ProfileUpdate = 'profile_update',
-}
+import { NotificationType } from '../enums/notification-type.js';
 
 export interface Notification {
   id: string;

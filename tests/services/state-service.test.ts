@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { StateService } from '../../src/services/state-service.js';
-import { ConversationType } from '../../src/types/conversation.js';
+import { ConversationType } from '../../src/enums/conversation-type.js';
 
 describe('StateService', () => {
   let tempDir: string;

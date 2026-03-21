@@ -1,7 +1,4 @@
-export enum MessageType {
-  Message = 'message',
-  System = 'system',
-}
+import { MessageType } from '../enums/message-type.js';
 
 export interface Message {
   id: string;

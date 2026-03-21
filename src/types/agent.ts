@@ -1,16 +1,4 @@
-export interface Profile {
-  name?: string;
-  role?: string;
-  expertise?: string;
-  status?: string;
-}
-
-export interface ProfileUpdate {
-  name?: string;
-  role?: string;
-  expertise?: string;
-  status?: string;
-}
+import { Profile } from './profile.js';
 
 export interface Agent {
   id: string;

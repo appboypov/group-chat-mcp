@@ -1,12 +1,9 @@
 import { ConversationType } from '../enums/conversation-type.js';
 
-export interface Conversation {
-  id: string;
+export interface CreateConversationParams {
   type: ConversationType;
   projectPath?: string;
   name?: string;
   topic?: string;
   participants: string[];
-  createdAt: number;
-  archivedAt?: number;
 }

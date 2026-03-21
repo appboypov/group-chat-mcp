@@ -5,8 +5,11 @@ export async function readJsonFile<T>(filePath: string): Promise<T | null> {
   try {
     const data = await fs.readFile(filePath, 'utf-8');
     return JSON.parse(data) as T;
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw err;
   }
 }
 
