@@ -1,25 +1,10 @@
 import path from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { NotificationType } from '../enums/notification-type.js';
 import type { Notification } from '../types/index.js';
 import { INBOXES_DIR } from '../constants/storage.js';
 import { withFileLock } from '../utils/file-lock.js';
 import { readJsonFile, writeJsonFile } from '../utils/file-utils.js';
-
-function formatNotificationContent(notification: Notification): string {
-  switch (notification.type) {
-    case NotificationType.Message:
-      return `[${notification.agentId}] in conversation ${notification.conversationId}: ${notification.content}`;
-    case NotificationType.Join:
-      return `[${notification.agentId}] joined conversation ${notification.conversationId}`;
-    case NotificationType.Leave:
-      return `[${notification.agentId}] left conversation ${notification.conversationId}`;
-    case NotificationType.ProfileUpdate:
-      return `[${notification.agentId}] updated their profile: ${notification.content}`;
-    default:
-      return notification.content;
-  }
-}
+import { formatNotificationContent } from '../utils/notification-utils.js';
 
 export class InboxPollerService {
   private intervalId: ReturnType<typeof setInterval> | null = null;

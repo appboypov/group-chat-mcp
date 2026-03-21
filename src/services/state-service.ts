@@ -37,6 +37,10 @@ export class StateService {
     this.storagePath = storagePath;
   }
 
+  get baseDir(): string {
+    return this.storagePath;
+  }
+
   async init(): Promise<void> {
     await this.ensureStorageDir();
   }
@@ -390,6 +394,16 @@ export class StateService {
   async clearInbox(agentId: string): Promise<void> {
     await withFileLock(this.inboxPath(agentId), async () => {
       await writeJsonFile(this.inboxPath(agentId), []);
+    });
+  }
+
+  async readAndClearInbox(agentId: string): Promise<Notification[]> {
+    return await withFileLock(this.inboxPath(agentId), async () => {
+      const notifications = (await readJsonFile<Notification[]>(this.inboxPath(agentId))) ?? [];
+      if (notifications.length > 0) {
+        await writeJsonFile(this.inboxPath(agentId), []);
+      }
+      return notifications;
     });
   }
 

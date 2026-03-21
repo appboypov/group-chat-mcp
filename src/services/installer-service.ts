@@ -8,6 +8,8 @@ import { Scope } from '../enums/scope.js';
 import {
   CURSOR_GLOBAL,
   CURSOR_LOCAL,
+  CURSOR_HOOKS_GLOBAL,
+  CURSOR_HOOKS_LOCAL,
 } from '../constants/settings-paths.js';
 import type { InstallOptions } from '../types/install-options.js';
 import type { UninstallOptions } from '../types/uninstall-options.js';
@@ -34,9 +36,53 @@ export class InstallerService {
     (config.mcpServers as Record<string, unknown>)['group-chat-mcp'] = {
       command: 'node',
       args: [serverPath],
+      env: {
+        GC_CLIENT_TYPE: 'cursor',
+        GC_POLL_INTERVAL_MS: '5000',
+      },
     };
 
     await this.writeAtomically(settingsPath, config);
+
+    // Hooks: write hooks.json
+    const hookScriptPath = this.resolveHookScriptPath();
+    const hooksPath = this.resolveHooksPath(options.ide, options.scope);
+    await fs.mkdir(path.dirname(hooksPath), { recursive: true });
+    const hooksConfig = await this.readSettingsFile(hooksPath);
+
+    if (!hooksConfig.version) {
+      hooksConfig.version = 1;
+    }
+
+    if (!hooksConfig.hooks || typeof hooksConfig.hooks !== 'object' || Array.isArray(hooksConfig.hooks)) {
+      hooksConfig.hooks = {};
+    }
+
+    const hooks = hooksConfig.hooks as Record<string, unknown[]>;
+    const hookCommand = `node "${hookScriptPath}"`;
+
+    const sessionStartEntry = { command: hookCommand, timeout: 10 };
+    const sessionEndEntry = { command: hookCommand, timeout: 5 };
+    const beforeMCPExecutionEntry = { command: hookCommand, timeout: 5, matcher: 'MCP:group-chat-mcp' };
+
+    const mergeHookEntries = (eventName: string, entry: Record<string, unknown>): void => {
+      if (!Array.isArray(hooks[eventName])) {
+        hooks[eventName] = [];
+      }
+      const arr = hooks[eventName] as Record<string, unknown>[];
+      const idx = arr.findIndex((e) => typeof e.command === 'string' && (e.command as string).includes('cursor-hook.js'));
+      if (idx >= 0) {
+        arr[idx] = entry;
+      } else {
+        arr.push(entry);
+      }
+    };
+
+    mergeHookEntries('sessionStart', sessionStartEntry);
+    mergeHookEntries('sessionEnd', sessionEndEntry);
+    mergeHookEntries('beforeMCPExecution', beforeMCPExecutionEntry);
+
+    await this.writeAtomically(hooksPath, hooksConfig);
   }
 
   async uninstall(options: UninstallOptions): Promise<void> {
@@ -78,6 +124,34 @@ export class InstallerService {
     delete servers['group-chat-mcp'];
 
     await this.writeAtomically(settingsPath, config);
+
+    // Hooks: clean up hooks.json
+    const hooksPath = this.resolveHooksPath(options.ide, options.scope);
+    let hooksConfig: Record<string, unknown>;
+    try {
+      hooksConfig = await this.readSettingsFile(hooksPath);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
+      }
+      throw err;
+    }
+
+    if (!hooksConfig.hooks || typeof hooksConfig.hooks !== 'object' || Array.isArray(hooksConfig.hooks)) {
+      return;
+    }
+
+    const hooks = hooksConfig.hooks as Record<string, unknown[]>;
+    for (const eventName of Object.keys(hooks)) {
+      if (!Array.isArray(hooks[eventName])) {
+        continue;
+      }
+      hooks[eventName] = (hooks[eventName] as Record<string, unknown>[]).filter(
+        (e) => typeof e.command !== 'string' || !(e.command as string).includes('cursor-hook.js'),
+      );
+    }
+
+    await this.writeAtomically(hooksPath, hooksConfig);
   }
 
   resolveServerPath(): string {
@@ -102,6 +176,30 @@ export class InstallerService {
       default:
         throw new Error(`resolveSettingsPath is not supported for ${ide}`);
     }
+  }
+
+  resolveHooksPath(ide: IDE, scope: Scope): string {
+    switch (ide) {
+      case IDE.Cursor:
+        return scope === Scope.Global ? CURSOR_HOOKS_GLOBAL : CURSOR_HOOKS_LOCAL();
+      default:
+        throw new Error(`resolveHooksPath is not supported for ${ide}`);
+    }
+  }
+
+  resolveHookScriptPath(): string {
+    const currentFile = fileURLToPath(import.meta.url);
+    const servicesDir = path.dirname(currentFile);
+    const distDir = path.dirname(servicesDir);
+    const hookScriptPath = path.join(distDir, 'hooks', 'cursor-hook.js');
+
+    if (!existsSync(hookScriptPath)) {
+      throw new Error(
+        `Hook script not found at ${hookScriptPath}. Run 'npm run build' first.`,
+      );
+    }
+
+    return hookScriptPath;
   }
 
   claudeCodeScope(scope: Scope): string {

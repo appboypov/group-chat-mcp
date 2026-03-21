@@ -38,6 +38,8 @@ export const LeaveConversationArgsSchema = z.object({
   conversationId: z.string(),
 });
 
+export const ReadNotificationsArgsSchema = z.object({});
+
 export const toolDefinitions = [
   {
     name: 'list_conversations',
@@ -135,6 +137,14 @@ export const toolDefinitions = [
         conversationId: { type: 'string', description: 'The conversation ID to leave.' },
       },
       required: ['conversationId'],
+    },
+  },
+  {
+    name: 'read_notifications',
+    description: 'Read and clear all pending notifications (messages, join/leave events) from other agents. Use this tool periodically to stay updated on conversation activity. Returns all pending notifications and empties the inbox.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
     },
   },
 ];

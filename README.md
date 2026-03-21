@@ -1,5 +1,9 @@
 # Group Chat MCP
 
+[![npm version](https://img.shields.io/npm/v/group-chat-mcp)](https://www.npmjs.com/package/group-chat-mcp)
+[![License](https://img.shields.io/github/license/appboypov/group-chat-mcp)](https://github.com/appboypov/group-chat-mcp/blob/main/LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
+
 Multi-agent communication server using the Model Context Protocol. Enables AI agents to create conversations, send messages, and receive real-time notifications through a shared file-based state system.
 
 ## Features
@@ -7,6 +11,8 @@ Multi-agent communication server using the Model Context Protocol. Enables AI ag
 - Real-time multi-agent messaging via MCP channel notifications
 - Project-scoped and direct message conversations
 - Automatic agent registration and cleanup per session
+- Per-session agent lifecycle for Cursor via hooks (`sessionStart`, `sessionEnd`, `beforeMCPExecution`)
+- Pull-based inbox for clients without push notification support (`read_notifications`)
 - File-based shared state with atomic locking
 - Zero-config setup via `gchat install`
 
@@ -40,7 +46,7 @@ The installer prompts for:
 - **IDE**: Claude Code, Cursor, or Both
 - **Scope**: Global (all projects) or Local (current project only)
 
-For Claude Code, the installer registers the MCP server via `claude mcp add` (requires the Claude Code CLI on PATH). For Cursor, it writes the configuration to the appropriate settings file.
+For Claude Code, the installer registers the MCP server via `claude mcp add` (requires the Claude Code CLI on PATH). For Cursor, it writes `mcp.json` with the server entry and `hooks.json` with session lifecycle hooks that register and unregister agents per chat session.
 
 To remove the configuration:
 
@@ -48,15 +54,25 @@ To remove the configuration:
 gchat uninstall
 ```
 
-### Enable channel notifications
+### Claude Code: enable channel notifications
 
-Channel notifications allow agents to receive messages in real-time as they arrive. For Claude Code, start your session with:
+Channel notifications allow agents to receive messages in real-time as they arrive. Start your session with:
 
 ```bash
 claude --dangerously-load-development-channels server:group-chat-mcp
 ```
 
 Without this flag, agents can still read messages by calling `get_conversation`, but incoming messages will not be injected into the conversation automatically.
+
+### Cursor: session lifecycle
+
+Cursor keeps MCP server processes alive across chat sessions. The installed hooks handle agent lifecycle automatically:
+
+- **`sessionStart`** registers a new agent and joins the project conversation.
+- **`sessionEnd`** leaves all conversations and unregisters the agent.
+- **`beforeMCPExecution`** auto-approves group-chat-mcp tools and prompts for all other MCP servers.
+
+Since Cursor does not support push notifications, agents use the `read_notifications` tool to poll for new messages.
 
 ## Usage
 
@@ -65,7 +81,7 @@ After setup, the MCP server starts automatically when your IDE launches a sessio
 1. Generates a unique agent ID
 2. Registers the agent in the shared state
 3. Joins the project conversation (one per project directory)
-4. Polls for incoming notifications
+4. Polls for incoming notifications (Claude Code) or exposes `read_notifications` (Cursor)
 5. Cleans up on disconnect (leaves conversations, unregisters)
 
 Multiple agents in the same project directory share a single project conversation.
@@ -158,12 +174,21 @@ Leave a conversation.
 
 Returns confirmation. Notifies remaining participants.
 
+### read_notifications
+
+Check for new messages and notifications from other agents. Returns all pending notifications and clears the inbox. Cursor agents should call this periodically to stay updated on conversation activity.
+
+No input parameters.
+
+Returns pending notifications or `"No new notifications."` if the inbox is empty.
+
 ## Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | GC_PROJECT_PATH | No | `process.cwd()` | Override the project directory path (must be an absolute path) |
 | GC_POLL_INTERVAL_MS | No | `2000` | Inbox polling interval in milliseconds |
+| GC_CLIENT_TYPE | No | — | Set to `"cursor"` to disable the push-based inbox poller (set automatically by the Cursor installer) |
 
 ## License
 

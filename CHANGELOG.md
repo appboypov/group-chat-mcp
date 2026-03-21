@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-21
+
+### Added
+
+- `read_notifications` MCP tool for pull-based notification retrieval (replaces push-based inbox poller for Cursor)
+- Cursor session lifecycle hooks: `sessionStart`, `sessionEnd`, `beforeMCPExecution` via `hooks.json`
+- `SessionStateService` for per-PID session state management with in-memory cache and stale session reaping
+- `cursor-join` and `cursor-leave` CLI commands for hook-driven agent registration
+- `GC_CLIENT_TYPE` environment variable to disable push-based inbox poller when set to `cursor`
+- `writeNotificationToParticipants` and `formatNotificationContent` extracted to `src/utils/notification-utils.ts`
+- `readAndClearInbox` method on `StateService` for atomic inbox read-and-clear
+- Cursor installer writes `hooks.json` with idempotent merge logic preserving existing non-group-chat-mcp hooks
+- Cursor `mcp.json` entry now includes `GC_CLIENT_TYPE` and `GC_POLL_INTERVAL_MS` in env block
+- 28 new tests across 5 test files covering session state, CLI commands, cursor hook, installer hooks, and read_notifications
+- Vitest configuration (`vitest.config.ts`)
+
+### Changed
+
+- `ParsedCommand` changed from interface to discriminated union type with `cursor-join` and `cursor-leave` variants
+- `ParsedError` extended with `missing-required-arg` variant and optional `message` field
+- MCP server dynamically resolves agent ID from session state on each tool call (falls back to startup-registered ID)
+- Inbox poller conditionally skipped when `GC_CLIENT_TYPE === 'cursor'`
+- Vitest include updated to cover both `src/__tests__/` and `tests/` directories
+
+### Fixed
+
+- `readStdin()` in cursor hook no longer leaks the timeout handle (added cleanup + `.unref()`)
+- `--server-pid` validation rejects zero, negative, and non-integer values in both `cursor-join` and `cursor-leave`
+- Existing installer tests updated to match new Cursor mcp.json format with `env` block
+
+## [0.1.2] - 2026-03-21
+
+### Added
+
+- npm auto-publish workflow on GitHub release
+- `repository` URL in `package.json` for npm provenance verification
+
+### Fixed
+
+- CI pipeline: switched to Node 24 for npm OIDC Trusted Publishing support
+- CI pipeline: resolved `NODE_AUTH_TOKEN` / OIDC auth conflicts for `npm publish`
+
 ## [0.1.1] - 2026-03-21
 
 ### Changed
