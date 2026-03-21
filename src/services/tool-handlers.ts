@@ -9,7 +9,7 @@ import {
   CreateConversationArgsSchema,
   JoinConversationArgsSchema,
   LeaveConversationArgsSchema,
-  CheckInboxArgsSchema,
+  ReadNotificationsArgsSchema,
 } from '../schemas/tool-schemas.js';
 import { StateService } from '../services/state-service.js';
 import { formatNotificationContent, writeNotificationToParticipants } from '../utils/notification-utils.js';
@@ -238,8 +238,8 @@ export async function handleToolCall(
       return textResult(`Left conversation ${conversationId}.`);
     }
 
-    case 'check_inbox': {
-      CheckInboxArgsSchema.parse(rawArgs ?? {});
+    case 'read_notifications': {
+      ReadNotificationsArgsSchema.parse(rawArgs ?? {});
       const notifications = await stateService.readAndClearInbox(agentId);
       if (notifications.length === 0) {
         return textResult('No new notifications.');

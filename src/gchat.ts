@@ -43,8 +43,8 @@ export function parseCommand(args: string[]): ParseResult {
       return { error: 'missing-required-arg', message: 'cursor-join requires --server-pid <pid>' };
     }
     const serverPid = Number(serverPidRaw);
-    if (Number.isNaN(serverPid)) {
-      return { error: 'missing-required-arg', message: '--server-pid must be a number' };
+    if (!Number.isInteger(serverPid) || serverPid <= 0) {
+      return { error: 'missing-required-arg', message: '--server-pid must be a positive integer' };
     }
     return { command, project, serverPid };
   }
@@ -55,8 +55,8 @@ export function parseCommand(args: string[]): ParseResult {
       return { error: 'missing-required-arg', message: 'cursor-leave requires --server-pid <pid>' };
     }
     const serverPid = Number(serverPidRaw);
-    if (Number.isNaN(serverPid)) {
-      return { error: 'missing-required-arg', message: '--server-pid must be a number' };
+    if (!Number.isInteger(serverPid) || serverPid <= 0) {
+      return { error: 'missing-required-arg', message: '--server-pid must be a positive integer' };
     }
     return { command, serverPid };
   }

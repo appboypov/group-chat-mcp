@@ -22,9 +22,9 @@ afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-describe('check_inbox', () => {
+describe('read_notifications', () => {
   describe('Given 3 notifications in agent inbox', () => {
-    it('When check_inbox tool is called Then all 3 are returned', async () => {
+    it('When read_notifications tool is called Then all 3 are returned', async () => {
       const agent = await stateService.registerAgent('/test-project');
       const inboxPath = path.join(tmpDir, 'inboxes', `${agent.id}.json`);
 
@@ -35,7 +35,7 @@ describe('check_inbox', () => {
       ];
       await writeJsonFile(inboxPath, notifications);
 
-      const result = await handleToolCall(stateService, 'check_inbox', agent.id, undefined);
+      const result = await handleToolCall(stateService, 'read_notifications', agent.id, undefined);
 
       const outputText = result.content[0].text;
       const outputLines = outputText.split('\n');
@@ -45,7 +45,7 @@ describe('check_inbox', () => {
       expect(notificationLines.length).toBe(3);
     });
 
-    it('When check_inbox tool is called Then inbox is empty after the call', async () => {
+    it('When read_notifications tool is called Then inbox is empty after the call', async () => {
       const agent = await stateService.registerAgent('/test-project');
       const inboxPath = path.join(tmpDir, 'inboxes', `${agent.id}.json`);
 
@@ -56,7 +56,7 @@ describe('check_inbox', () => {
       ];
       await writeJsonFile(inboxPath, notifications);
 
-      await handleToolCall(stateService, 'check_inbox', agent.id, undefined);
+      await handleToolCall(stateService, 'read_notifications', agent.id, undefined);
 
       const raw = await fs.readFile(inboxPath, 'utf-8');
       const remaining = JSON.parse(raw);
@@ -65,10 +65,10 @@ describe('check_inbox', () => {
   });
 
   describe('Given empty inbox', () => {
-    it('When check_inbox tool is called Then result indicates no notifications and inbox remains empty', async () => {
+    it('When read_notifications tool is called Then result indicates no notifications and inbox remains empty', async () => {
       const agent = await stateService.registerAgent('/test-project');
 
-      const result = await handleToolCall(stateService, 'check_inbox', agent.id, undefined);
+      const result = await handleToolCall(stateService, 'read_notifications', agent.id, undefined);
 
       expect(result.content).toBeDefined();
       expect(result.content.length).toBeGreaterThan(0);
@@ -80,7 +80,7 @@ describe('check_inbox', () => {
   });
 
   describe('Given agent has notifications', () => {
-    it('When check_inbox is called Then notifications are formatted using the same format as the inbox poller', async () => {
+    it('When read_notifications is called Then notifications are formatted using the same format as the inbox poller', async () => {
       const agent = await stateService.registerAgent('/test-project');
       const inboxPath = path.join(tmpDir, 'inboxes', `${agent.id}.json`);
 
@@ -91,7 +91,7 @@ describe('check_inbox', () => {
       ];
       await writeJsonFile(inboxPath, notifications);
 
-      const result = await handleToolCall(stateService, 'check_inbox', agent.id, undefined);
+      const result = await handleToolCall(stateService, 'read_notifications', agent.id, undefined);
       const outputText = result.content[0].text;
       const outputLines = outputText.split('\n').slice(1);
 

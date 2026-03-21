@@ -38,7 +38,7 @@ export const LeaveConversationArgsSchema = z.object({
   conversationId: z.string(),
 });
 
-export const CheckInboxArgsSchema = z.object({});
+export const ReadNotificationsArgsSchema = z.object({});
 
 export const toolDefinitions = [
   {
@@ -140,8 +140,8 @@ export const toolDefinitions = [
     },
   },
   {
-    name: 'check_inbox',
-    description: 'Check for new messages and notifications from other agents. Use this tool periodically (every few seconds) to stay updated on conversation activity. Returns all pending notifications and clears the inbox.',
+    name: 'read_notifications',
+    description: 'Read and clear all pending notifications (messages, join/leave events) from other agents. Use this tool periodically to stay updated on conversation activity. Returns all pending notifications and empties the inbox.',
     inputSchema: {
       type: 'object' as const,
       properties: {},

@@ -47,6 +47,14 @@ class TestInstallerService extends InstallerService {
     return this.testSettingsPath;
   }
 
+  override resolveHooksPath(_ide: IDE, _scope: Scope): string {
+    return path.join(path.dirname(this.testSettingsPath), 'hooks.json');
+  }
+
+  override resolveHookScriptPath(): string {
+    return '/test/dist/hooks/cursor-hook.js';
+  }
+
   override execClaudeCli(args: string[]): void {
     this.lastClaudeCliArgs = args;
   }
@@ -147,6 +155,10 @@ describe('InstallerService', () => {
     expect(config.mcpServers['group-chat-mcp']).toEqual({
       command: 'node',
       args: [serverPath],
+      env: {
+        GC_CLIENT_TYPE: 'cursor',
+        GC_POLL_INTERVAL_MS: '5000',
+      },
     });
   });
 
@@ -171,6 +183,10 @@ describe('InstallerService', () => {
     expect(config.mcpServers['group-chat-mcp']).toEqual({
       command: 'node',
       args: [newServerPath],
+      env: {
+        GC_CLIENT_TYPE: 'cursor',
+        GC_POLL_INTERVAL_MS: '5000',
+      },
     });
   });
 
@@ -254,6 +270,10 @@ describe('InstallerService', () => {
     expect(config.mcpServers['group-chat-mcp']).toEqual({
       command: 'node',
       args: [serverPath],
+      env: {
+        GC_CLIENT_TYPE: 'cursor',
+        GC_POLL_INTERVAL_MS: '5000',
+      },
     });
   });
 
@@ -280,6 +300,10 @@ describe('InstallerService', () => {
     expect(config.mcpServers['group-chat-mcp']).toEqual({
       command: 'node',
       args: [serverPath],
+      env: {
+        GC_CLIENT_TYPE: 'cursor',
+        GC_POLL_INTERVAL_MS: '5000',
+      },
     });
   });
 

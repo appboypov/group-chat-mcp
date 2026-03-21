@@ -12,17 +12,41 @@ function writeResponse(response: HookResponse): void {
 }
 
 function readStdin(): Promise<string> {
-  return Promise.race([
-    new Promise<string>((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
-      process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-      process.stdin.on('error', reject);
-    }),
-    new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error('stdin read timed out')), STDIN_TIMEOUT_MS);
-    }),
-  ]);
+  return new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+
+    const onData = (chunk: Buffer) => {
+      chunks.push(chunk);
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      process.stdin.off('data', onData);
+      process.stdin.off('end', onEnd);
+      process.stdin.off('error', onError);
+    };
+
+    const onEnd = () => {
+      cleanup();
+      resolve(Buffer.concat(chunks).toString('utf-8'));
+    };
+
+    const onError = (err: Error) => {
+      cleanup();
+      reject(err);
+    };
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('stdin read timed out'));
+    }, STDIN_TIMEOUT_MS);
+
+    (timeout as NodeJS.Timeout).unref?.();
+
+    process.stdin.on('data', onData);
+    process.stdin.on('end', onEnd);
+    process.stdin.on('error', onError);
+  });
 }
 
 async function handleSessionStart(input: HookInput): Promise<void> {
