@@ -6,4 +6,5 @@ export interface Agent {
   profile: Profile;
   joinedAt: number;
   conversations: string[];
+  pid: number;
 }

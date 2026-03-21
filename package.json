@@ -4,12 +4,11 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "group-chat-mcp": "dist/cli.js"
+    "gchat": "dist/gchat.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "cli": "node dist/cli.js",
     "test": "vitest run"
   },
   "dependencies": {

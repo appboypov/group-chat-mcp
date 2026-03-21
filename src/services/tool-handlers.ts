@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
-import { GC_AGENT_ID } from '../constants/env.js';
 import { BASE_DIR, INBOXES_DIR } from '../constants/storage.js';
 import { ConversationType } from '../enums/conversation-type.js';
 import { NotificationType } from '../enums/notification-type.js';
@@ -27,7 +26,7 @@ function errorResult(message: string) {
   return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
 }
 
-async function writeNotificationToParticipants(
+export async function writeNotificationToParticipants(
   stateService: StateService,
   conversationId: string,
   senderId: string,
@@ -58,13 +57,14 @@ async function writeNotificationToParticipants(
 export async function handleToolCall(
   stateService: StateService,
   name: string,
+  agentId: string,
   rawArgs: Record<string, unknown> | undefined,
 ) {
   switch (name) {
     case 'list_conversations': {
       const args = ListConversationsArgsSchema.parse(rawArgs ?? {});
       const scope = args.scope ?? 'all';
-      const agent = await stateService.getAgent(GC_AGENT_ID);
+      const agent = await stateService.getAgent(agentId);
       if (scope === 'project' && !agent) {
         return errorResult('Agent is not registered. Register first before listing project conversations.');
       }
@@ -117,9 +117,9 @@ export async function handleToolCall(
 
     case 'send_message': {
       const args = SendMessageArgsSchema.parse(rawArgs ?? {});
-      const { content, conversationId, agentId } = args;
+      const { content, conversationId, agentId: targetAgentId } = args;
 
-      if (!conversationId && !agentId) {
+      if (!conversationId && !targetAgentId) {
         return errorResult('Either conversationId or agentId is required.');
       }
 
@@ -129,16 +129,16 @@ export async function handleToolCall(
         if (!conversation) {
           return errorResult(`Conversation ${conversationId} not found.`);
         }
-        if (!conversation.participants.includes(GC_AGENT_ID)) {
+        if (!conversation.participants.includes(agentId)) {
           return errorResult('You must join this conversation before sending messages.');
         }
         targetConversationId = conversationId;
       } else {
-        const dmConversation = await stateService.getOrCreateDmConversation(GC_AGENT_ID, agentId!);
+        const dmConversation = await stateService.getOrCreateDmConversation(agentId, targetAgentId!);
         targetConversationId = dmConversation.id;
       }
 
-      const message = await stateService.addMessage(targetConversationId, GC_AGENT_ID, content, 'message');
+      const message = await stateService.addMessage(targetConversationId, agentId, content, 'message');
       return textResult(`Message sent (${message.id}) to conversation ${targetConversationId}.`);
     }
 
@@ -185,17 +185,17 @@ export async function handleToolCall(
       if (args.expertise !== undefined) profileUpdate.expertise = args.expertise;
       if (args.status !== undefined) profileUpdate.status = args.status;
 
-      const agent = await stateService.updateProfile(GC_AGENT_ID, profileUpdate);
+      const agent = await stateService.updateProfile(agentId, profileUpdate);
 
       const updatedFields = Object.keys(profileUpdate).join(', ');
       for (const conversationId of agent.conversations) {
         await writeNotificationToParticipants(
           stateService,
           conversationId,
-          GC_AGENT_ID,
+          agentId,
           NotificationType.ProfileUpdate,
-          `${agent.profile.name ?? GC_AGENT_ID} updated: ${updatedFields}`,
-          GC_AGENT_ID,
+          `${agent.profile.name ?? agentId} updated: ${updatedFields}`,
+          agentId,
         );
       }
 
@@ -218,7 +218,7 @@ export async function handleToolCall(
         type: ConversationType.Group,
         name: convName,
         topic,
-        participants: [GC_AGENT_ID],
+        participants: [agentId],
       });
 
       return textResult(
@@ -230,17 +230,17 @@ export async function handleToolCall(
       const args = JoinConversationArgsSchema.parse(rawArgs ?? {});
       const { conversationId } = args;
 
-      await stateService.joinConversation(GC_AGENT_ID, conversationId);
+      await stateService.joinConversation(agentId, conversationId);
 
-      const agent = await stateService.getAgent(GC_AGENT_ID);
-      const agentName = agent?.profile.name ?? GC_AGENT_ID;
+      const agent = await stateService.getAgent(agentId);
+      const agentName = agent?.profile.name ?? agentId;
 
-      await stateService.addMessage(conversationId, GC_AGENT_ID, `${agentName} joined the conversation.`, 'system');
+      await stateService.addMessage(conversationId, agentId, `${agentName} joined the conversation.`, 'system');
 
       await writeNotificationToParticipants(
         stateService,
         conversationId,
-        GC_AGENT_ID,
+        agentId,
         NotificationType.Join,
         `${agentName} joined the conversation.`,
       );
@@ -252,20 +252,20 @@ export async function handleToolCall(
       const args = LeaveConversationArgsSchema.parse(rawArgs ?? {});
       const { conversationId } = args;
 
-      const agent = await stateService.getAgent(GC_AGENT_ID);
-      const agentName = agent?.profile.name ?? GC_AGENT_ID;
+      const agent = await stateService.getAgent(agentId);
+      const agentName = agent?.profile.name ?? agentId;
 
-      await stateService.addMessage(conversationId, GC_AGENT_ID, `${agentName} left the conversation.`, 'system');
+      await stateService.addMessage(conversationId, agentId, `${agentName} left the conversation.`, 'system');
 
       await writeNotificationToParticipants(
         stateService,
         conversationId,
-        GC_AGENT_ID,
+        agentId,
         NotificationType.Leave,
         `${agentName} left the conversation.`,
       );
 
-      await stateService.leaveConversation(GC_AGENT_ID, conversationId);
+      await stateService.leaveConversation(agentId, conversationId);
 
       return textResult(`Left conversation ${conversationId}.`);
     }

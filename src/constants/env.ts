@@ -1,10 +1,4 @@
-const agentId = process.env.GC_AGENT_ID;
-if (!agentId) {
-  console.error('ERROR: GC_AGENT_ID environment variable is required');
-  process.exit(1);
-}
-
-export const GC_AGENT_ID: string = agentId;
+export const GC_PROJECT_PATH: string | undefined = process.env.GC_PROJECT_PATH;
 
 const parsedPollInterval = process.env.GC_POLL_INTERVAL_MS
   ? parseInt(process.env.GC_POLL_INTERVAL_MS, 10)

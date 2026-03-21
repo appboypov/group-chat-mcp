@@ -20,7 +20,7 @@ import type {
   Notification,
 } from '../types/index.js';
 import { readJsonFile, writeJsonFile, appendToJsonArray } from '../utils/file-utils.js';
-import { withFileLock } from '../utils/file-lock.js';
+import { isProcessAlive, withFileLock } from '../utils/file-lock.js';
 
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -116,11 +116,49 @@ export class StateService {
         profile: {},
         joinedAt: Date.now(),
         conversations: [],
+        pid: process.pid,
       };
       const agents = await this.getAgents();
       agents.push(agent);
       await writeJsonFile(this.agentsPath(), agents);
       return agent;
+    });
+  }
+
+  async reapStaleAgents(): Promise<string[]> {
+    return this.withStateLock(async () => {
+      const agents = await this.getAgents();
+      const staleIds: string[] = [];
+      const alive: Agent[] = [];
+      for (const agent of agents) {
+        if (agent.pid && !isProcessAlive(agent.pid)) {
+          staleIds.push(agent.id);
+        } else {
+          alive.push(agent);
+        }
+      }
+      if (staleIds.length > 0) {
+        await writeJsonFile(this.agentsPath(), alive);
+
+        const conversations = await this.readConversations();
+        let conversationsChanged = false;
+        for (const conversation of conversations) {
+          const before = conversation.participants.length;
+          conversation.participants = conversation.participants.filter(
+            (p) => !staleIds.includes(p),
+          );
+          if (conversation.participants.length !== before) {
+            conversationsChanged = true;
+            if (conversation.participants.length === 0 && !conversation.archivedAt) {
+              conversation.archivedAt = Date.now();
+            }
+          }
+        }
+        if (conversationsChanged) {
+          await writeJsonFile(this.conversationsPath(), conversations);
+        }
+      }
+      return staleIds;
     });
   }
 

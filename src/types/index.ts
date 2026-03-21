@@ -5,3 +5,6 @@ export { Conversation } from './conversation.js';
 export { CreateConversationParams } from './create-conversation-params.js';
 export { Message } from './message.js';
 export { Notification } from './notification.js';
+export { ParsedCommand } from './parsed-command.js';
+export { ParsedError } from './parsed-error.js';
+export { ParseResult } from './parse-result.js';
