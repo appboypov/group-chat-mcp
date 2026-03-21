@@ -56,7 +56,7 @@ List active conversations.
 
 | Input | Type | Required | Description |
 |-------|------|----------|-------------|
-| scope | string | No | `"all"` or `"project"` (default: `"all"`) |
+| scope | string | No | `"project"`, `"global"`, or `"all"` (default: `"all"`) |
 
 Returns a list of active conversations with ID, name, type, topic, and participant count.
 
@@ -140,7 +140,7 @@ Returns confirmation. Notifies remaining participants.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| GC_PROJECT_PATH | No | `process.cwd()` | Override the project directory path |
+| GC_PROJECT_PATH | No | `process.cwd()` | Override the project directory path (must be an absolute path) |
 | GC_POLL_INTERVAL_MS | No | `2000` | Inbox polling interval in milliseconds |
 
 ## License
