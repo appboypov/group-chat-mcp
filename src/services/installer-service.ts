@@ -1,12 +1,11 @@
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { IDE } from '../enums/ide.js';
 import { Scope } from '../enums/scope.js';
 import {
-  CLAUDE_CODE_GLOBAL,
-  CLAUDE_CODE_LOCAL,
   CURSOR_GLOBAL,
   CURSOR_LOCAL,
 } from '../constants/settings-paths.js';
@@ -16,10 +15,16 @@ import type { UninstallOptions } from '../types/uninstall-options.js';
 export class InstallerService {
   async install(options: InstallOptions): Promise<void> {
     const serverPath = this.resolveServerPath();
+
+    if (options.ide === IDE.ClaudeCode) {
+      const scope = this.claudeCodeScope(options.scope);
+      this.execClaudeCli(['mcp', 'add', 'group-chat-mcp', '--scope', scope, '--', 'node', serverPath]);
+      return;
+    }
+
+    // Cursor: JSON file approach
     const settingsPath = this.resolveSettingsPath(options.ide, options.scope);
-
     await fs.mkdir(path.dirname(settingsPath), { recursive: true });
-
     const config = await this.readSettingsFile(settingsPath);
 
     if (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers)) {
@@ -35,6 +40,20 @@ export class InstallerService {
   }
 
   async uninstall(options: UninstallOptions): Promise<void> {
+    if (options.ide === IDE.ClaudeCode) {
+      const scope = this.claudeCodeScope(options.scope);
+      try {
+        this.execClaudeCli(['mcp', 'remove', 'group-chat-mcp', '--scope', scope]);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!message.toLowerCase().includes('not found')) {
+          throw err;
+        }
+      }
+      return;
+    }
+
+    // Cursor: JSON file approach
     const settingsPath = this.resolveSettingsPath(options.ide, options.scope);
 
     let config: Record<string, unknown>;
@@ -78,10 +97,27 @@ export class InstallerService {
 
   resolveSettingsPath(ide: IDE, scope: Scope): string {
     switch (ide) {
-      case IDE.ClaudeCode:
-        return scope === Scope.Global ? CLAUDE_CODE_GLOBAL : CLAUDE_CODE_LOCAL();
       case IDE.Cursor:
         return scope === Scope.Global ? CURSOR_GLOBAL : CURSOR_LOCAL();
+      default:
+        throw new Error(`resolveSettingsPath is not supported for ${ide}`);
+    }
+  }
+
+  claudeCodeScope(scope: Scope): string {
+    return scope === Scope.Global ? 'user' : 'project';
+  }
+
+  protected execClaudeCli(args: string[]): void {
+    try {
+      execFileSync('claude', args, { stdio: 'pipe' });
+    } catch (err: unknown) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        throw new Error('Claude Code CLI not found. Install it from https://docs.anthropic.com/en/docs/claude-code');
+      }
+      const stderr = (err as { stderr?: Buffer })?.stderr?.toString().trim() ?? '';
+      throw new Error(`Claude CLI failed: ${stderr || 'unknown error'}`);
     }
   }
 

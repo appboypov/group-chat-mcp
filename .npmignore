@@ -1,0 +1,6 @@
+src/
+tests/
+workspace/
+.mcp.json
+.claude/
+tsconfig.json

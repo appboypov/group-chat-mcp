@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "group-chat-mcp": {
-      "command": "node",
-      "args": ["/Users/codaveto/Repos/group-chat-mcp/dist/index.js"]
-    }
-  }
-}

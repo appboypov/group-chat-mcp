@@ -8,9 +8,30 @@ import { IDE } from '../../src/enums/ide.js';
 import { Scope } from '../../src/enums/scope.js';
 import { parseCommand } from '../../src/gchat.js';
 
+class EnoentInstallerService extends InstallerService {
+  override resolveServerPath(): string {
+    return '/test/dist/index.js';
+  }
+
+  override execClaudeCli(_args: string[]): void {
+    throw new Error('Claude Code CLI not found. Install it from https://docs.anthropic.com/en/docs/claude-code');
+  }
+}
+
+class NotFoundInstallerService extends InstallerService {
+  override resolveServerPath(): string {
+    return '/test/dist/index.js';
+  }
+
+  override execClaudeCli(_args: string[]): void {
+    throw new Error('Claude CLI failed: Server not found');
+  }
+}
+
 class TestInstallerService extends InstallerService {
   private readonly testServerPath: string;
   private readonly testSettingsPath: string;
+  public lastClaudeCliArgs: string[] | null = null;
 
   constructor(testServerPath: string, testSettingsPath: string) {
     super();
@@ -24,6 +45,10 @@ class TestInstallerService extends InstallerService {
 
   override resolveSettingsPath(_ide: IDE, _scope: Scope): string {
     return this.testSettingsPath;
+  }
+
+  override execClaudeCli(args: string[]): void {
+    this.lastClaudeCliArgs = args;
   }
 }
 
@@ -39,22 +64,67 @@ describe('InstallerService', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  it('Given no settings file exists When install is called for Claude Code global Then a new settings.json is created with the correct mcpServers entry', async () => {
+  it('Given Claude Code global scope When install is called Then claude mcp add is executed with --scope user', async () => {
     const serverPath = '/test/dist/index.js';
     const settingsPath = path.join(tempDir, 'settings.json');
     const service = new TestInstallerService(serverPath, settingsPath);
 
     await service.install({ ide: IDE.ClaudeCode, scope: Scope.Global });
 
-    const raw = await fs.readFile(settingsPath, 'utf-8');
-    const config = JSON.parse(raw);
-    expect(config.mcpServers['group-chat-mcp']).toEqual({
-      command: 'node',
-      args: [serverPath],
-    });
+    expect(service.lastClaudeCliArgs).toEqual([
+      'mcp', 'add', 'group-chat-mcp', '--scope', 'user', '--', 'node', serverPath,
+    ]);
   });
 
-  it('Given a settings file with existing MCP servers When install is called Then group-chat-mcp is added alongside existing entries', async () => {
+  it('Given Claude Code local scope When install is called Then claude mcp add is executed with --scope project', async () => {
+    const serverPath = '/test/dist/index.js';
+    const settingsPath = path.join(tempDir, 'settings.json');
+    const service = new TestInstallerService(serverPath, settingsPath);
+
+    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Local });
+
+    expect(service.lastClaudeCliArgs).toEqual([
+      'mcp', 'add', 'group-chat-mcp', '--scope', 'project', '--', 'node', serverPath,
+    ]);
+  });
+
+  it('Given Claude Code global scope When uninstall is called Then claude mcp remove is executed with --scope user', async () => {
+    const serverPath = '/test/dist/index.js';
+    const settingsPath = path.join(tempDir, 'settings.json');
+    const service = new TestInstallerService(serverPath, settingsPath);
+
+    await service.uninstall({ ide: IDE.ClaudeCode, scope: Scope.Global });
+
+    expect(service.lastClaudeCliArgs).toEqual([
+      'mcp', 'remove', 'group-chat-mcp', '--scope', 'user',
+    ]);
+  });
+
+  it('Given claude CLI is not installed When install is called for Claude Code Then an error is thrown with install instructions', async () => {
+    const service = new EnoentInstallerService();
+    await expect(
+      service.install({ ide: IDE.ClaudeCode, scope: Scope.Global }),
+    ).rejects.toThrow('Claude Code CLI not found');
+  });
+
+  it('Given Claude Code IDE When resolveSettingsPath is called Then an error is thrown', () => {
+    const service = new InstallerService();
+    expect(() => service.resolveSettingsPath(IDE.ClaudeCode, Scope.Global)).toThrow();
+  });
+
+  it('Given Claude Code local scope When uninstall is called Then claude mcp remove is executed with --scope project', async () => {
+    const serverPath = '/test/dist/index.js';
+    const settingsPath = path.join(tempDir, 'settings.json');
+    const service = new TestInstallerService(serverPath, settingsPath);
+
+    await service.uninstall({ ide: IDE.ClaudeCode, scope: Scope.Local });
+
+    expect(service.lastClaudeCliArgs).toEqual([
+      'mcp', 'remove', 'group-chat-mcp', '--scope', 'project',
+    ]);
+  });
+
+  it('Given a settings file with existing MCP servers When install is called for Cursor Then group-chat-mcp is added alongside existing entries', async () => {
     const serverPath = '/test/dist/index.js';
     const settingsPath = path.join(tempDir, 'settings.json');
     const service = new TestInstallerService(serverPath, settingsPath);
@@ -66,7 +136,7 @@ describe('InstallerService', () => {
       }),
     );
 
-    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Global });
+    await service.install({ ide: IDE.Cursor, scope: Scope.Global });
 
     const raw = await fs.readFile(settingsPath, 'utf-8');
     const config = JSON.parse(raw);
@@ -80,7 +150,7 @@ describe('InstallerService', () => {
     });
   });
 
-  it('Given group-chat-mcp already exists in settings When install is called Then the entry is overwritten with the current path', async () => {
+  it('Given group-chat-mcp already exists in settings When install is called for Cursor Then the entry is overwritten with the current path', async () => {
     const settingsPath = path.join(tempDir, 'settings.json');
     const newServerPath = '/new/dist/index.js';
     const service = new TestInstallerService(newServerPath, settingsPath);
@@ -94,7 +164,7 @@ describe('InstallerService', () => {
       }),
     );
 
-    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Global });
+    await service.install({ ide: IDE.Cursor, scope: Scope.Global });
 
     const raw = await fs.readFile(settingsPath, 'utf-8');
     const config = JSON.parse(raw);
@@ -104,7 +174,7 @@ describe('InstallerService', () => {
     });
   });
 
-  it('Given group-chat-mcp exists in settings When uninstall is called Then the entry is removed and all other settings are preserved', async () => {
+  it('Given group-chat-mcp exists in settings When uninstall is called for Cursor Then the entry is removed and all other settings are preserved', async () => {
     const settingsPath = path.join(tempDir, 'settings.json');
     const service = new TestInstallerService('/test/dist/index.js', settingsPath);
 
@@ -118,7 +188,7 @@ describe('InstallerService', () => {
       }),
     );
 
-    await service.uninstall({ ide: IDE.ClaudeCode, scope: Scope.Global });
+    await service.uninstall({ ide: IDE.Cursor, scope: Scope.Global });
 
     const raw = await fs.readFile(settingsPath, 'utf-8');
     const config = JSON.parse(raw);
@@ -129,12 +199,12 @@ describe('InstallerService', () => {
     expect(config.mcpServers['group-chat-mcp']).toBeUndefined();
   });
 
-  it('Given no settings file exists When uninstall is called Then no error occurs', async () => {
+  it('Given no settings file exists When uninstall is called for Cursor Then no error occurs', async () => {
     const settingsPath = path.join(tempDir, 'nonexistent', 'settings.json');
     const service = new TestInstallerService('/test/dist/index.js', settingsPath);
 
     await expect(
-      service.uninstall({ ide: IDE.ClaudeCode, scope: Scope.Global }),
+      service.uninstall({ ide: IDE.Cursor, scope: Scope.Global }),
     ).resolves.toBeUndefined();
   });
 
@@ -144,13 +214,7 @@ describe('InstallerService', () => {
     expect(result).toBe(path.join(os.homedir(), '.cursor', 'mcp.json'));
   });
 
-  it('Given Claude Code local scope When resolveSettingsPath is called Then the path is path.join(process.cwd(), .mcp.json)', () => {
-    const service = new InstallerService();
-    const result = service.resolveSettingsPath(IDE.ClaudeCode, Scope.Local);
-    expect(result).toBe(path.join(process.cwd(), '.mcp.json'));
-  });
-
-  it('Given a settings.json with existing non-MCP settings When install is called Then all non-mcpServers keys are preserved unchanged', async () => {
+  it('Given a settings.json with existing non-MCP settings When install is called for Cursor Then all non-mcpServers keys are preserved unchanged', async () => {
     const serverPath = '/test/dist/index.js';
     const settingsPath = path.join(tempDir, 'settings.json');
     const service = new TestInstallerService(serverPath, settingsPath);
@@ -164,7 +228,7 @@ describe('InstallerService', () => {
       }),
     );
 
-    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Global });
+    await service.install({ ide: IDE.Cursor, scope: Scope.Global });
 
     const raw = await fs.readFile(settingsPath, 'utf-8');
     const config = JSON.parse(raw);
@@ -176,24 +240,6 @@ describe('InstallerService', () => {
   it('Given dist/index.js does not exist at the resolved path When resolveServerPath is called Then an error is thrown', () => {
     const service = new InstallerService();
     expect(() => service.resolveServerPath()).toThrow();
-  });
-
-  it('Given Claude Code local scope When install is called Then .mcp.json is created in the current directory', async () => {
-    const serverPath = '/test/dist/index.js';
-    const settingsPath = path.join(tempDir, '.mcp.json');
-    const service = new TestInstallerService(serverPath, settingsPath);
-
-    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Local });
-
-    const exists = await fs.stat(settingsPath).then(() => true).catch(() => false);
-    expect(exists).toBe(true);
-
-    const raw = await fs.readFile(settingsPath, 'utf-8');
-    const config = JSON.parse(raw);
-    expect(config.mcpServers['group-chat-mcp']).toEqual({
-      command: 'node',
-      args: [serverPath],
-    });
   });
 
   it('Given Cursor global scope When install is called Then the settings file is created with the correct entry', async () => {
@@ -211,23 +257,23 @@ describe('InstallerService', () => {
     });
   });
 
-  it('Given a settings file with invalid JSON When install is called Then an error is thrown with a message to fix the file manually', async () => {
+  it('Given a settings file with invalid JSON When install is called for Cursor Then an error is thrown with a message to fix the file manually', async () => {
     const settingsPath = path.join(tempDir, 'settings.json');
     const service = new TestInstallerService('/test/dist/index.js', settingsPath);
 
     await fs.writeFile(settingsPath, 'not valid json {{{');
 
     await expect(
-      service.install({ ide: IDE.ClaudeCode, scope: Scope.Global }),
+      service.install({ ide: IDE.Cursor, scope: Scope.Global }),
     ).rejects.toThrow();
   });
 
-  it('Given the parent directory for the settings file does not exist When install is called Then the directory is created before writing', async () => {
+  it('Given the parent directory for the settings file does not exist When install is called for Cursor Then the directory is created before writing', async () => {
     const serverPath = '/test/dist/index.js';
     const settingsPath = path.join(tempDir, 'nonexistent', 'subdir', 'settings.json');
     const service = new TestInstallerService(serverPath, settingsPath);
 
-    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Global });
+    await service.install({ ide: IDE.Cursor, scope: Scope.Global });
 
     const raw = await fs.readFile(settingsPath, 'utf-8');
     const config = JSON.parse(raw);
@@ -237,12 +283,12 @@ describe('InstallerService', () => {
     });
   });
 
-  it('Given install is called Then the group-chat-mcp entry has command node and args containing the absolute path to dist/index.js', async () => {
+  it('Given install is called for Cursor Then the group-chat-mcp entry has command node and args containing the absolute path to dist/index.js', async () => {
     const serverPath = '/absolute/path/to/dist/index.js';
     const settingsPath = path.join(tempDir, 'settings.json');
     const service = new TestInstallerService(serverPath, settingsPath);
 
-    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Global });
+    await service.install({ ide: IDE.Cursor, scope: Scope.Global });
 
     const raw = await fs.readFile(settingsPath, 'utf-8');
     const config = JSON.parse(raw);
@@ -252,27 +298,24 @@ describe('InstallerService', () => {
     expect(path.isAbsolute(entry.args[0])).toBe(true);
   });
 
-  it('Given group-chat-mcp already exists with a different path When install is called Then exactly one entry exists with the updated path', async () => {
-    const settingsPath = path.join(tempDir, 'settings.json');
-    const newServerPath = '/updated/dist/index.js';
-    const service = new TestInstallerService(newServerPath, settingsPath);
+  it('Given Cursor local scope When install is called Then the settings file is created at the test path', async () => {
+    const serverPath = '/test/dist/index.js';
+    const settingsPath = path.join(tempDir, '.cursor', 'mcp.json');
+    const service = new TestInstallerService(serverPath, settingsPath);
 
-    await fs.writeFile(
-      settingsPath,
-      JSON.stringify({
-        mcpServers: {
-          'group-chat-mcp': { command: 'node', args: ['/old/dist/index.js'] },
-        },
-      }),
-    );
-
-    await service.install({ ide: IDE.ClaudeCode, scope: Scope.Global });
+    await service.install({ ide: IDE.Cursor, scope: Scope.Local });
 
     const raw = await fs.readFile(settingsPath, 'utf-8');
     const config = JSON.parse(raw);
-    const keys = Object.keys(config.mcpServers).filter((k) => k === 'group-chat-mcp');
-    expect(keys).toHaveLength(1);
-    expect(config.mcpServers['group-chat-mcp'].args).toEqual([newServerPath]);
+    expect(config.mcpServers['group-chat-mcp']).toBeDefined();
+    expect(config.mcpServers['group-chat-mcp'].command).toBe('node');
+  });
+
+  it('Given claude CLI reports server not found When uninstall is called for Claude Code Then no error is thrown', async () => {
+    const service = new NotFoundInstallerService();
+    await expect(
+      service.uninstall({ ide: IDE.ClaudeCode, scope: Scope.Global }),
+    ).resolves.not.toThrow();
   });
 });
 

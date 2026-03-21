@@ -40,7 +40,7 @@ The installer prompts for:
 - **IDE**: Claude Code, Cursor, or Both
 - **Scope**: Global (all projects) or Local (current project only)
 
-This writes the MCP server configuration to the appropriate settings file. No manual JSON editing required.
+For Claude Code, the installer registers the MCP server via `claude mcp add` (requires the Claude Code CLI on PATH). For Cursor, it writes the configuration to the appropriate settings file.
 
 To remove the configuration:
 

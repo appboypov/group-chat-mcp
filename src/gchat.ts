@@ -48,12 +48,22 @@ async function main(): Promise<void> {
 
       if (result.command === 'install') {
         await installer.install({ ide, scope });
-        const settingsPath = installer.resolveSettingsPath(ide, scope);
-        console.log(`✓ Installed group-chat-mcp for ${ideName} (${scopeName}): ${settingsPath}`);
+        if (ide === IDE.ClaudeCode) {
+          const claudeScope = installer.claudeCodeScope(scope);
+          console.log(`✓ Installed group-chat-mcp for ${ideName} (${claudeScope})`);
+        } else {
+          const settingsPath = installer.resolveSettingsPath(ide, scope);
+          console.log(`✓ Installed group-chat-mcp for ${ideName} (${scopeName}): ${settingsPath}`);
+        }
       } else {
         await installer.uninstall({ ide, scope });
-        const settingsPath = installer.resolveSettingsPath(ide, scope);
-        console.log(`✓ Uninstalled group-chat-mcp from ${ideName} (${scopeName}): ${settingsPath}`);
+        if (ide === IDE.ClaudeCode) {
+          const claudeScope = installer.claudeCodeScope(scope);
+          console.log(`✓ Uninstalled group-chat-mcp from ${ideName} (${claudeScope})`);
+        } else {
+          const settingsPath = installer.resolveSettingsPath(ide, scope);
+          console.log(`✓ Uninstalled group-chat-mcp from ${ideName} (${scopeName}): ${settingsPath}`);
+        }
       }
     }
   } finally {
