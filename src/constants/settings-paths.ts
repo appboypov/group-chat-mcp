@@ -6,3 +6,9 @@ export const CURSOR_GLOBAL = path.join(os.homedir(), '.cursor', 'mcp.json');
 export function CURSOR_LOCAL(): string {
   return path.join(process.cwd(), '.cursor', 'mcp.json');
 }
+
+export const CURSOR_HOOKS_GLOBAL = path.join(os.homedir(), '.cursor', 'hooks.json');
+
+export function CURSOR_HOOKS_LOCAL(): string {
+  return path.join(process.cwd(), '.cursor', 'hooks.json');
+}

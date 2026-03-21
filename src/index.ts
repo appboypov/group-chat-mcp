@@ -5,15 +5,18 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { GC_PROJECT_PATH, GC_POLL_INTERVAL_MS } from './constants/env.js';
+import { GC_PROJECT_PATH, GC_POLL_INTERVAL_MS, GC_CLIENT_TYPE } from './constants/env.js';
 import { BASE_DIR } from './constants/storage.js';
 import { NotificationType } from './enums/notification-type.js';
-import { handleToolCall, writeNotificationToParticipants } from './services/tool-handlers.js';
+import { handleToolCall } from './services/tool-handlers.js';
+import { writeNotificationToParticipants } from './utils/notification-utils.js';
 import { toolDefinitions } from './schemas/tool-schemas.js';
 import { StateService } from './services/state-service.js';
+import { SessionStateService } from './services/session-state-service.js';
 import { InboxPollerService } from './services/inbox-poller.js';
 
 const stateService = new StateService();
+const sessionStateService = new SessionStateService();
 const inboxPoller = new InboxPollerService();
 
 const server = new Server(
@@ -47,6 +50,11 @@ async function main(): Promise<void> {
     console.error(`Reaped ${staleIds.length} stale agent(s): ${staleIds.join(', ')}`);
   }
 
+  const staleSessions = await sessionStateService.reapStaleSessions();
+  if (staleSessions.length > 0) {
+    console.error(`Reaped ${staleSessions.length} stale session(s): ${staleSessions.join(', ')}`);
+  }
+
   const agent = await stateService.registerAgent(projectPath);
   const agentId = agent.id;
   console.error(`Agent registered: ${agentId}, project: ${projectPath}`);
@@ -55,6 +63,8 @@ async function main(): Promise<void> {
   const conversationId = conversation.id;
   await stateService.joinConversation(agentId, conversationId);
   console.error(`Joined project conversation: ${conversationId}`);
+
+  await sessionStateService.writeSessionAgent(process.pid, agentId, projectPath);
 
   const agentName = agent.profile.name ?? agentId;
   await stateService.addMessage(conversationId, agentId, `${agentName} joined the conversation.`, 'system');
@@ -69,14 +79,18 @@ async function main(): Promise<void> {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: rawArgs } = request.params;
     try {
-      return await handleToolCall(stateService, name, agentId, rawArgs);
+      const session = await sessionStateService.readSessionAgent(process.pid);
+      const currentAgentId = session?.agentId ?? agentId;
+      return await handleToolCall(stateService, name, currentAgentId, rawArgs);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
     }
   });
 
-  inboxPoller.start(agentId, GC_POLL_INTERVAL_MS, server, BASE_DIR);
+  if (GC_CLIENT_TYPE !== 'cursor') {
+    inboxPoller.start(agentId, GC_POLL_INTERVAL_MS, server, BASE_DIR);
+  }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -88,17 +102,20 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.error('Shutdown started');
 
+    const session = await sessionStateService.readSessionAgent(process.pid).catch(() => null);
+    const currentAgentId = session?.agentId ?? agentId;
+
     try {
-      const currentAgent = await stateService.getAgent(agentId);
+      const currentAgent = await stateService.getAgent(currentAgentId);
       if (currentAgent) {
         for (const convId of [...currentAgent.conversations]) {
           try {
-            const name = currentAgent.profile.name ?? agentId;
-            await stateService.addMessage(convId, agentId, `${name} left the conversation.`, 'system');
+            const name = currentAgent.profile.name ?? currentAgentId;
+            await stateService.addMessage(convId, currentAgentId, `${name} left the conversation.`, 'system');
             await writeNotificationToParticipants(
               stateService,
               convId,
-              agentId,
+              currentAgentId,
               NotificationType.Leave,
               `${name} left the conversation.`,
             );
@@ -112,10 +129,17 @@ async function main(): Promise<void> {
     }
 
     try {
-      await stateService.unregisterAgent(agentId);
+      await stateService.unregisterAgent(currentAgentId);
       console.error('Agent unregistered');
     } catch (err: unknown) {
       console.error('Failed to unregister agent:', err);
+    }
+
+    try {
+      await sessionStateService.clearSessionAgent(process.pid);
+      console.error('Session state cleared');
+    } catch (err: unknown) {
+      console.error('Failed to clear session state:', err);
     }
 
     try {

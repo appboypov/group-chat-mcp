@@ -1,6 +1,3 @@
-import path from 'node:path';
-import { v4 as uuidv4 } from 'uuid';
-import { BASE_DIR, INBOXES_DIR } from '../constants/storage.js';
 import { ConversationType } from '../enums/conversation-type.js';
 import { NotificationType } from '../enums/notification-type.js';
 import {
@@ -12,11 +9,10 @@ import {
   CreateConversationArgsSchema,
   JoinConversationArgsSchema,
   LeaveConversationArgsSchema,
+  CheckInboxArgsSchema,
 } from '../schemas/tool-schemas.js';
 import { StateService } from '../services/state-service.js';
-import type { Notification } from '../types/index.js';
-import { appendToJsonArray } from '../utils/file-utils.js';
-import { withFileLock } from '../utils/file-lock.js';
+import { formatNotificationContent, writeNotificationToParticipants } from '../utils/notification-utils.js';
 
 function textResult(text: string) {
   return { content: [{ type: 'text' as const, text }] };
@@ -24,34 +20,6 @@ function textResult(text: string) {
 
 function errorResult(message: string) {
   return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
-}
-
-export async function writeNotificationToParticipants(
-  stateService: StateService,
-  conversationId: string,
-  senderId: string,
-  type: NotificationType,
-  content: string,
-  excludeAgentId?: string,
-): Promise<void> {
-  const conversation = await stateService.getConversation(conversationId);
-  if (!conversation) return;
-
-  for (const participantId of conversation.participants) {
-    if (participantId === (excludeAgentId ?? senderId)) continue;
-    const notification: Notification = {
-      id: uuidv4(),
-      type,
-      conversationId,
-      agentId: senderId,
-      content,
-      timestamp: Date.now(),
-    };
-    const inboxPath = path.join(BASE_DIR, INBOXES_DIR, `${participantId}.json`);
-    await withFileLock(inboxPath, async () => {
-      await appendToJsonArray(inboxPath, notification);
-    });
-  }
 }
 
 export async function handleToolCall(
@@ -268,6 +236,16 @@ export async function handleToolCall(
       await stateService.leaveConversation(agentId, conversationId);
 
       return textResult(`Left conversation ${conversationId}.`);
+    }
+
+    case 'check_inbox': {
+      CheckInboxArgsSchema.parse(rawArgs ?? {});
+      const notifications = await stateService.readAndClearInbox(agentId);
+      if (notifications.length === 0) {
+        return textResult('No new notifications.');
+      }
+      const lines = notifications.map(formatNotificationContent);
+      return textResult(`${notifications.length} notification(s):\n${lines.join('\n')}`);
     }
 
     default:
