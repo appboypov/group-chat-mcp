@@ -38,7 +38,6 @@ export class InstallerService {
       args: [serverPath],
       env: {
         GC_CLIENT_TYPE: 'cursor',
-        GC_POLL_INTERVAL_MS: '5000',
       },
     };
 

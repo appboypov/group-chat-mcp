@@ -124,7 +124,7 @@ describe('InstallerService', () => {
   });
 
   describe('Given Cursor install', () => {
-    it('When mcp.json is written Then it includes GC_CLIENT_TYPE and GC_POLL_INTERVAL_MS in the env block', async () => {
+    it('When mcp.json is written Then it includes GC_CLIENT_TYPE in the env block', async () => {
       await installer.install({ ide: IDE.Cursor, scope: Scope.Global });
 
       const mcpPath = path.join(tmpDir, 'mcp.json');
@@ -133,7 +133,6 @@ describe('InstallerService', () => {
 
       const serverConfig = config.mcpServers['group-chat-mcp'];
       expect(serverConfig.env.GC_CLIENT_TYPE).toBe('cursor');
-      expect(serverConfig.env.GC_POLL_INTERVAL_MS).toBe('5000');
     });
   });
 });
