@@ -5,6 +5,7 @@ export interface Notification {
   type: NotificationType;
   conversationId: string;
   agentId: string;
+  agentName?: string;
   content: string;
   timestamp: number;
 }

@@ -12,7 +12,7 @@ import {
   ReadNotificationsArgsSchema,
 } from '../schemas/tool-schemas.js';
 import { StateService } from '../services/state-service.js';
-import { formatNotificationContent, writeNotificationToParticipants } from '../utils/notification-utils.js';
+import { formatNotificationContent, writeNotificationToParticipants, writeProfileSetupNotification } from '../utils/notification-utils.js';
 
 function textResult(text: string) {
   return { content: [{ type: 'text' as const, text }] };
@@ -104,10 +104,19 @@ export async function handleToolCall(
       } else {
         const dmConversation = await stateService.getOrCreateDmConversation(agentId, targetAgentId!);
         targetConversationId = dmConversation.id;
+        await stateService.setHasAnnounced(agentId, targetConversationId);
+        await stateService.setHasAnnounced(targetAgentId!, targetConversationId);
       }
 
       const message = await stateService.addMessage(targetConversationId, agentId, content, 'message');
-      return textResult(`Message sent (${message.id}) to conversation ${targetConversationId}.`);
+
+      const agent = await stateService.getAgent(agentId);
+      const conversation = await stateService.getConversation(targetConversationId);
+      let responseText = `Message sent (${message.id}) to conversation ${targetConversationId}.`;
+      if ((agent?.profile.name == null) && conversation && conversation.participants.length >= 2) {
+        responseText += '\n\nReminder: your profile is not set. Use update_profile to set your name, role, expertise, and status so other participants can identify you.';
+      }
+      return textResult(responseText);
     }
 
     case 'get_conversation': {
@@ -147,23 +156,37 @@ export async function handleToolCall(
 
     case 'update_profile': {
       const args = UpdateProfileArgsSchema.parse(rawArgs ?? {});
-      const profileUpdate: Record<string, string> = {};
-      if (args.name !== undefined) profileUpdate.name = args.name;
-      if (args.role !== undefined) profileUpdate.role = args.role;
-      if (args.expertise !== undefined) profileUpdate.expertise = args.expertise;
-      if (args.status !== undefined) profileUpdate.status = args.status;
 
-      const agent = await stateService.updateProfile(agentId, profileUpdate);
+      const agent = await stateService.updateProfile(agentId, {
+        name: args.name,
+        role: args.role,
+        expertise: args.expertise,
+        status: args.status,
+      });
 
-      const updatedFields = Object.keys(profileUpdate).join(', ');
-      for (const conversationId of agent.conversations) {
+      for (const convId of agent.conversations) {
+        if (!agent.hasAnnounced[convId]) {
+          await stateService.addMessage(convId, agentId, `${agent.profile.name} joined the conversation.`, 'system');
+          await writeNotificationToParticipants(
+            stateService,
+            convId,
+            agentId,
+            NotificationType.Join,
+            `${agent.profile.name} joined the conversation.`,
+            { agentName: agent.profile.name },
+          );
+          await stateService.setHasAnnounced(agentId, convId);
+        }
+      }
+
+      for (const convId of agent.conversations) {
         await writeNotificationToParticipants(
           stateService,
-          conversationId,
+          convId,
           agentId,
           NotificationType.ProfileUpdate,
-          `${agent.profile.name ?? agentId} updated: ${updatedFields}`,
-          agentId,
+          `${agent.profile.name ?? agentId} updated: name, role, expertise, status`,
+          { excludeAgentId: agentId, agentName: agent.profile.name },
         );
       }
 
@@ -188,6 +211,7 @@ export async function handleToolCall(
         topic,
         participants: [agentId],
       });
+      await stateService.setHasAnnounced(agentId, conversation.id);
 
       return textResult(
         `Conversation created:\n  ID: ${conversation.id}\n  Name: ${conversation.name}\n  Topic: ${conversation.topic ?? 'none'}\n  Type: ${conversation.type}`,
@@ -200,18 +224,10 @@ export async function handleToolCall(
 
       await stateService.joinConversation(agentId, conversationId);
 
-      const agent = await stateService.getAgent(agentId);
-      const agentName = agent?.profile.name ?? agentId;
-
-      await stateService.addMessage(conversationId, agentId, `${agentName} joined the conversation.`, 'system');
-
-      await writeNotificationToParticipants(
-        stateService,
-        conversationId,
-        agentId,
-        NotificationType.Join,
-        `${agentName} joined the conversation.`,
-      );
+      const conversation = await stateService.getConversation(conversationId);
+      if (conversation && conversation.participants.length >= 2) {
+        await writeProfileSetupNotification(stateService, conversationId, agentId);
+      }
 
       return textResult(`Joined conversation ${conversationId}.`);
     }
@@ -231,6 +247,7 @@ export async function handleToolCall(
         agentId,
         NotificationType.Leave,
         `${agentName} left the conversation.`,
+        { agentName: agent?.profile.name },
       );
 
       await stateService.leaveConversation(agentId, conversationId);

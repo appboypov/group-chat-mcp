@@ -7,8 +7,6 @@ import { SessionStateService } from '../services/session-state-service.js';
 import { handleCursorJoin, handleCursorLeave } from '../gchat.js';
 import { ConversationType } from '../enums/conversation-type.js';
 import { NotificationType } from '../enums/notification-type.js';
-import { INBOXES_DIR } from '../constants/storage.js';
-import type { Notification } from '../types/notification.js';
 
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -63,10 +61,20 @@ describe('cursor-join', () => {
       expect(conversation).not.toBeNull();
       expect(conversation!.participants).toContain(result.agentId);
     });
+    it('When cursor-join is called Then no system message is written to the conversation', async () => {
+      const projectPath = '/test-project';
+      const serverPid = 12345;
+
+      const result = await handleCursorJoin(projectPath, serverPid, { stateService, sessionStateService });
+
+      const messages = await stateService.getMessages(result.conversationId);
+      const systemMessages = messages.filter((m) => m.type === 'system');
+      expect(systemMessages).toHaveLength(0);
+    });
   });
 
   describe('Given project path with existing conversation and 1 participant', () => {
-    it('When cursor-join is called Then a join notification is written to the existing participant inbox', async () => {
+    it('When cursor-join is called for a conversation with existing participants Then the new agent inbox contains a profile setup notification', async () => {
       const projectPath = '/test-project';
 
       const agentA = await stateService.registerAgent(projectPath);
@@ -76,19 +84,16 @@ describe('cursor-join', () => {
       const serverPidB = 54321;
       const result = await handleCursorJoin(projectPath, serverPidB, { stateService, sessionStateService });
 
-      const inboxPath = path.join(tmpDir, INBOXES_DIR, `${agentA.id}.json`);
-      let notifications: Notification[] = [];
-      try {
-        const raw = await fs.readFile(inboxPath, 'utf-8');
-        notifications = JSON.parse(raw) as Notification[];
-      } catch {
-        notifications = [];
-      }
+      const joiningNotifications = await stateService.getInbox(result.agentId);
 
-      const joinNotification = notifications.find(
-        (n) => n.type === NotificationType.Join && n.agentId === result.agentId,
+      const profileSetupNotification = joiningNotifications.find(
+        (n) => n.type === NotificationType.Join && n.content.includes('Update your profile'),
       );
-      expect(joinNotification).toBeDefined();
+      expect(profileSetupNotification).toBeDefined();
+
+      const existingNotifications = await stateService.getInbox(agentA.id);
+
+      expect(existingNotifications).toHaveLength(0);
     });
   });
 });
@@ -130,14 +135,7 @@ describe('cursor-leave', () => {
 
       await handleCursorLeave(serverPidX, { stateService, sessionStateService });
 
-      const inboxPath = path.join(tmpDir, INBOXES_DIR, `${resultY.agentId}.json`);
-      let notifications: Notification[] = [];
-      try {
-        const raw = await fs.readFile(inboxPath, 'utf-8');
-        notifications = JSON.parse(raw) as Notification[];
-      } catch {
-        notifications = [];
-      }
+      const notifications = await stateService.getInbox(resultY.agentId);
 
       const leaveNotification = notifications.find(
         (n) => n.type === NotificationType.Leave && n.agentId === resultX.agentId,

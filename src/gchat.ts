@@ -8,7 +8,7 @@ import { Scope } from './enums/scope.js';
 import { InstallerService } from './services/installer-service.js';
 import { SessionStateService } from './services/session-state-service.js';
 import { StateService } from './services/state-service.js';
-import { writeNotificationToParticipants } from './utils/notification-utils.js';
+import { writeNotificationToParticipants, writeProfileSetupNotification } from './utils/notification-utils.js';
 import type { ParseResult } from './types/parse-result.js';
 import { PromptUtils } from './utils/prompt-utils.js';
 
@@ -77,14 +77,12 @@ export async function handleCursorJoin(
   const agent = await stateService.registerAgent(projectPath);
   const conversation = await stateService.getOrCreateProjectConversation(projectPath);
   await stateService.joinConversation(agent.id, conversation.id);
-  await stateService.addMessage(conversation.id, agent.id, `${agent.id} joined the conversation.`, 'system');
-  await writeNotificationToParticipants(
-    stateService,
-    conversation.id,
-    agent.id,
-    NotificationType.Join,
-    `${agent.id} joined the conversation.`,
-  );
+
+  const updatedConversation = await stateService.getConversation(conversation.id);
+  if (updatedConversation && updatedConversation.participants.length >= 2) {
+    await writeProfileSetupNotification(stateService, conversation.id, agent.id);
+  }
+
   await sessionStateService.writeSessionAgent(serverPid, agent.id, projectPath);
   return { agentId: agent.id, conversationId: conversation.id };
 }
@@ -110,6 +108,7 @@ export async function handleCursorLeave(
         agent.id,
         NotificationType.Leave,
         `${agent.profile.name ?? agent.id} left the conversation.`,
+        { agentName: agent.profile.name },
       );
     }
   }

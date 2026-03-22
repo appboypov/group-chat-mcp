@@ -120,6 +120,7 @@ export class StateService {
         profile: {},
         joinedAt: Date.now(),
         conversations: [],
+        hasAnnounced: {},
         pid: process.pid,
       };
       const agents = await this.getAgents();
@@ -202,6 +203,18 @@ export class StateService {
       agent.profile = { ...agent.profile, ...profile };
       await writeJsonFile(this.agentsPath(), agents);
       return agent;
+    });
+  }
+
+  async setHasAnnounced(agentId: string, conversationId: string): Promise<void> {
+    await withFileLock(this.agentsPath(), async () => {
+      const agents = await this.getAgents();
+      const agent = agents.find((a) => a.id === agentId);
+      if (!agent) {
+        throw new Error(`Agent ${agentId} not found`);
+      }
+      agent.hasAnnounced[conversationId] = true;
+      await writeJsonFile(this.agentsPath(), agents);
     });
   }
 

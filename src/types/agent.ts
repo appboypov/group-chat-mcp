@@ -6,5 +6,6 @@ export interface Agent {
   profile: Profile;
   joinedAt: number;
   conversations: string[];
+  hasAnnounced: Record<string, boolean>;
   pid: number;
 }
