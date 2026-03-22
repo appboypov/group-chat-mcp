@@ -104,8 +104,11 @@ export async function handleToolCall(
       } else {
         const dmConversation = await stateService.getOrCreateDmConversation(agentId, targetAgentId!);
         targetConversationId = dmConversation.id;
-        await stateService.setHasAnnounced(agentId, targetConversationId);
-        await stateService.setHasAnnounced(targetAgentId!, targetConversationId);
+        const dmMessages = await stateService.getMessages(targetConversationId);
+        if (dmMessages.length === 0) {
+          await stateService.setHasAnnounced(agentId, targetConversationId);
+          await stateService.setHasAnnounced(targetAgentId!, targetConversationId);
+        }
       }
 
       const message = await stateService.addMessage(targetConversationId, agentId, content, 'message');
@@ -166,15 +169,18 @@ export async function handleToolCall(
 
       for (const convId of agent.conversations) {
         if (!agent.hasAnnounced[convId]) {
-          await stateService.addMessage(convId, agentId, `${agent.profile.name} joined the conversation.`, 'system');
-          await writeNotificationToParticipants(
-            stateService,
-            convId,
-            agentId,
-            NotificationType.Join,
-            `${agent.profile.name} joined the conversation.`,
-            { agentName: agent.profile.name },
-          );
+          const conversation = await stateService.getConversation(convId);
+          if (conversation && conversation.participants.length >= 2) {
+            await stateService.addMessage(convId, agentId, `${agent.profile.name} joined the conversation.`, 'system');
+            await writeNotificationToParticipants(
+              stateService,
+              convId,
+              agentId,
+              NotificationType.Join,
+              `${agent.profile.name} joined the conversation.`,
+              { agentName: agent.profile.name },
+            );
+          }
           await stateService.setHasAnnounced(agentId, convId);
         }
       }
@@ -225,7 +231,8 @@ export async function handleToolCall(
       await stateService.joinConversation(agentId, conversationId);
 
       const conversation = await stateService.getConversation(conversationId);
-      if (conversation && conversation.participants.length >= 2) {
+      const agent = await stateService.getAgent(agentId);
+      if (conversation && conversation.participants.length >= 2 && !agent?.profile.name) {
         await writeProfileSetupNotification(stateService, conversationId, agentId);
       }
 

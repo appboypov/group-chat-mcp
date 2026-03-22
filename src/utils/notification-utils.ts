@@ -13,7 +13,10 @@ export function formatNotificationContent(notification: Notification): string {
     case NotificationType.Message:
       return `[${displayName}] in conversation ${notification.conversationId}: ${notification.content}`;
     case NotificationType.Join:
-      return `[${displayName}] joined conversation ${notification.conversationId}${notification.content ? ': ' + notification.content : ''}`;
+      if (notification.content && notification.content.trim().length > 0) {
+        return notification.content;
+      }
+      return `[${displayName}] joined conversation ${notification.conversationId}`;
     case NotificationType.Leave:
       return `[${displayName}] left conversation ${notification.conversationId}`;
     case NotificationType.ProfileUpdate:

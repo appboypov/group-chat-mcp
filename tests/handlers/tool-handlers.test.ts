@@ -110,8 +110,11 @@ describe('Tool Handlers', () => {
   describe('Deferred join announcement', () => {
     it('Given agent A has hasAnnounced[convX]=false When agent A calls update_profile with all fields Then a system message "{name} joined the conversation." appears in convX messages', async () => {
       const projectPath = '/project/test';
-      const agentA = await service.registerAgent(projectPath);
+      const agentB = await service.registerAgent(projectPath);
       const conversation = await service.getOrCreateProjectConversation(projectPath);
+      await service.joinConversation(agentB.id, conversation.id);
+
+      const agentA = await service.registerAgent(projectPath);
       await service.joinConversation(agentA.id, conversation.id);
 
       await handleToolCall(service, 'update_profile', agentA.id, {
@@ -196,14 +199,17 @@ describe('Tool Handlers', () => {
     });
     it('Given agent A in two conversations both with hasAnnounced=false When agent A calls update_profile Then both conversations receive deferred join messages', async () => {
       const projectPath = '/project/test';
-      const agentA = await service.registerAgent(projectPath);
+      const agentB = await service.registerAgent(projectPath);
       const conv1 = await service.getOrCreateProjectConversation(projectPath);
+      await service.joinConversation(agentB.id, conv1.id);
+
+      const agentA = await service.registerAgent(projectPath);
       await service.joinConversation(agentA.id, conv1.id);
 
       const conv2 = await service.createConversation({
         type: ConversationType.Group,
         name: 'Second Chat',
-        participants: [agentA.id],
+        participants: [agentA.id, agentB.id],
       });
 
       await handleToolCall(service, 'update_profile', agentA.id, {
@@ -373,19 +379,21 @@ describe('Tool Handlers', () => {
       expect(inbox[0].agentName).toBe('Builder');
     });
 
-    it('Given a Join notification without agentName set When formatNotificationContent is called Then the output contains the agentId UUID', () => {
+    it('Given a Join notification without agentName set and no content When formatNotificationContent is called Then the output contains the agentId UUID', () => {
       const agentId = uuidv4();
+      const conversationId = uuidv4();
       const notification: Notification = {
         id: uuidv4(),
         type: NotificationType.Join,
-        conversationId: uuidv4(),
+        conversationId,
         agentId,
-        content: 'joined',
+        content: '',
         timestamp: Date.now(),
       };
 
       const output = formatNotificationContent(notification);
       expect(output).toContain(agentId);
+      expect(output).toContain(conversationId);
     });
   });
 });

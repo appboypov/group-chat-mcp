@@ -213,6 +213,9 @@ export class StateService {
       if (!agent) {
         throw new Error(`Agent ${agentId} not found`);
       }
+      if (!agent.hasAnnounced) {
+        agent.hasAnnounced = {};
+      }
       agent.hasAnnounced[conversationId] = true;
       await writeJsonFile(this.agentsPath(), agents);
     });
