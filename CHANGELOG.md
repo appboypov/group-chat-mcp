@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-03-22
+
+### Added
+
+- Deferred join announcements: agents no longer broadcast anonymous UUID-based join messages; announcements are deferred until `update_profile` is called, producing human-readable join messages with the agent's chosen name
+- `hasAnnounced` per-conversation flag on agents to track announcement state
+- `writeProfileSetupNotification` prompts joining agents to set their profile when entering a multi-participant conversation
+- Profile reminder on `send_message` when a nameless agent messages a multi-participant conversation
+- `agentName` field on notifications; `formatNotificationContent` prefers `agentName` over UUID for display
+
+### Changed
+
+- `update_profile` now requires all four fields (`name`, `role`, `expertise`, `status`) as non-empty strings
+- `writeNotificationToParticipants` signature changed to accept `opts` object with optional `excludeAgentId` and `agentName`
+
+### Fixed
+
+- Defensive initialization of `hasAnnounced` for agents loaded from pre-migration storage
+- DM path no longer calls `setHasAnnounced` on every message (only on new DM creation)
+- Profile setup notification skipped for agents that already have a profile name
+- Solo conversation deferred join announcements skipped (no pointless system messages)
+- Join notification formatting no longer produces redundant output when content is present
+
 ## [0.1.4] - 2026-03-22
 
 ### Changed
