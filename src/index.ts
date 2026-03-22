@@ -9,7 +9,7 @@ import { GC_PROJECT_PATH, GC_POLL_INTERVAL_MS, GC_CLIENT_TYPE } from './constant
 import { BASE_DIR } from './constants/storage.js';
 import { NotificationType } from './enums/notification-type.js';
 import { handleToolCall } from './services/tool-handlers.js';
-import { writeNotificationToParticipants } from './utils/notification-utils.js';
+import { writeNotificationToParticipants, writeProfileSetupNotification } from './utils/notification-utils.js';
 import { toolDefinitions } from './schemas/tool-schemas.js';
 import { StateService } from './services/state-service.js';
 import { SessionStateService } from './services/session-state-service.js';
@@ -66,15 +66,10 @@ async function main(): Promise<void> {
 
   await sessionStateService.writeSessionAgent(process.pid, agentId, projectPath);
 
-  const agentName = agent.profile.name ?? agentId;
-  await stateService.addMessage(conversationId, agentId, `${agentName} joined the conversation.`, 'system');
-  await writeNotificationToParticipants(
-    stateService,
-    conversationId,
-    agentId,
-    NotificationType.Join,
-    `${agentName} joined the conversation.`,
-  );
+  const updatedConversation = await stateService.getConversation(conversationId);
+  if (updatedConversation && updatedConversation.participants.length >= 2) {
+    await writeProfileSetupNotification(stateService, conversationId, agentId);
+  }
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: rawArgs } = request.params;
@@ -118,6 +113,7 @@ async function main(): Promise<void> {
               currentAgentId,
               NotificationType.Leave,
               `${name} left the conversation.`,
+              { agentName: name },
             );
           } catch (err: unknown) {
             console.error(`Failed to write leave message for conversation ${convId}:`, err);

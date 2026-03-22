@@ -11,6 +11,7 @@ import type { Notification } from '../src/types/index.js';
 import { appendToJsonArray } from '../src/utils/file-utils.js';
 import { withFileLock } from '../src/utils/file-lock.js';
 
+
 async function writeNotificationToParticipantsLocal(
   stateService: StateService,
   storagePath: string,
@@ -92,34 +93,6 @@ describe('Server Lifecycle', () => {
       expect(updated!.participants).toContain(agent.id);
     });
 
-    it('Given other agents exist in the project conversation When the server starts Then a system join message is added and notifications are written to their inboxes', async () => {
-      const projectPath = '/project/test';
-
-      const existingAgent = await service.registerAgent(projectPath);
-      const conversation = await service.getOrCreateProjectConversation(projectPath);
-      await service.joinConversation(existingAgent.id, conversation.id);
-
-      const newAgent = await service.registerAgent(projectPath);
-      await service.joinConversation(newAgent.id, conversation.id);
-      const agentName = newAgent.profile.name ?? newAgent.id;
-      await service.addMessage(conversation.id, newAgent.id, `${agentName} joined the conversation.`, 'system');
-      await writeNotificationToParticipantsLocal(
-        service,
-        tempDir,
-        conversation.id,
-        newAgent.id,
-        NotificationType.Join,
-        `${agentName} joined the conversation.`,
-      );
-
-      const messages = await service.getMessages(conversation.id);
-      const joinMessage = messages.find((m) => m.type === 'system' && m.senderId === newAgent.id);
-      expect(joinMessage).toBeDefined();
-
-      const inbox = await service.getInbox(existingAgent.id);
-      expect(inbox).toHaveLength(1);
-      expect(inbox[0].type).toBe(NotificationType.Join);
-    });
   });
 
   describe('Shutdown', () => {

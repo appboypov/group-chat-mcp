@@ -19,10 +19,10 @@ export const GetConversationArgsSchema = z.object({
 });
 
 export const UpdateProfileArgsSchema = z.object({
-  name: z.string().optional(),
-  role: z.string().optional(),
-  expertise: z.string().optional(),
-  status: z.string().optional(),
+  name: z.string().min(1),
+  role: z.string().min(1),
+  expertise: z.string().min(1),
+  status: z.string().min(1),
 });
 
 export const CreateConversationArgsSchema = z.object({
@@ -103,6 +103,7 @@ export const toolDefinitions = [
         expertise: { type: 'string', description: 'Areas of expertise.' },
         status: { type: 'string', description: 'Current status.' },
       },
+      required: ['name', 'role', 'expertise', 'status'],
     },
   },
   {

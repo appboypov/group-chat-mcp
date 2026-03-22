@@ -8,18 +8,41 @@ import { appendToJsonArray } from './file-utils.js';
 import { withFileLock } from './file-lock.js';
 
 export function formatNotificationContent(notification: Notification): string {
+  const displayName = notification.agentName ?? notification.agentId;
   switch (notification.type) {
     case NotificationType.Message:
-      return `[${notification.agentId}] in conversation ${notification.conversationId}: ${notification.content}`;
+      return `[${displayName}] in conversation ${notification.conversationId}: ${notification.content}`;
     case NotificationType.Join:
-      return `[${notification.agentId}] joined conversation ${notification.conversationId}`;
+      if (notification.content && notification.content.trim().length > 0) {
+        return notification.content;
+      }
+      return `[${displayName}] joined conversation ${notification.conversationId}`;
     case NotificationType.Leave:
-      return `[${notification.agentId}] left conversation ${notification.conversationId}`;
+      return `[${displayName}] left conversation ${notification.conversationId}`;
     case NotificationType.ProfileUpdate:
-      return `[${notification.agentId}] updated their profile: ${notification.content}`;
+      return `[${displayName}] updated their profile: ${notification.content}`;
     default:
       return notification.content;
   }
+}
+
+export async function writeProfileSetupNotification(
+  stateService: StateService,
+  conversationId: string,
+  agentId: string,
+): Promise<void> {
+  const notification: Notification = {
+    id: uuidv4(),
+    type: NotificationType.Join,
+    conversationId,
+    agentId,
+    content: 'You joined a conversation with other participants. Update your profile (name, role, expertise, status) using update_profile once your role becomes clear.',
+    timestamp: Date.now(),
+  };
+  const inboxPath = path.join(stateService.baseDir, INBOXES_DIR, `${agentId}.json`);
+  await withFileLock(inboxPath, async () => {
+    await appendToJsonArray(inboxPath, notification);
+  });
 }
 
 export async function writeNotificationToParticipants(
@@ -28,18 +51,19 @@ export async function writeNotificationToParticipants(
   senderId: string,
   type: NotificationType,
   content: string,
-  excludeAgentId?: string,
+  opts?: { excludeAgentId?: string; agentName?: string },
 ): Promise<void> {
   const conversation = await stateService.getConversation(conversationId);
   if (!conversation) return;
 
   for (const participantId of conversation.participants) {
-    if (participantId === (excludeAgentId ?? senderId)) continue;
+    if (participantId === (opts?.excludeAgentId ?? senderId)) continue;
     const notification: Notification = {
       id: uuidv4(),
       type,
       conversationId,
       agentId: senderId,
+      ...(opts?.agentName != null && { agentName: opts.agentName }),
       content,
       timestamp: Date.now(),
     };
