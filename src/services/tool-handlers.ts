@@ -1,5 +1,7 @@
+import path from 'node:path';
 import { ConversationType } from '../enums/conversation-type.js';
 import { NotificationType } from '../enums/notification-type.js';
+import { MESSAGES_DIR } from '../constants/storage.js';
 import {
   ListConversationsArgsSchema,
   ListParticipantsArgsSchema,
@@ -13,6 +15,14 @@ import {
 } from '../schemas/tool-schemas.js';
 import { StateService } from '../services/state-service.js';
 import { formatNotificationContent, writeNotificationToParticipants, writeProfileSetupNotification } from '../utils/notification-utils.js';
+import {
+  tryAcquireSendLock,
+  waitForSendLockRelease,
+  getMessagesSince,
+  getMessageCount,
+  releaseSendLock,
+  sendLockDir,
+} from '../utils/send-lock.js';
 
 function textResult(text: string) {
   return { content: [{ type: 'text' as const, text }] };
@@ -111,15 +121,70 @@ export async function handleToolCall(
         }
       }
 
-      const message = await stateService.addMessage(targetConversationId, agentId, content, 'message');
+      const lockDir = sendLockDir(stateService.baseDir, targetConversationId);
+      const messagesPath = path.join(stateService.baseDir, MESSAGES_DIR, `${targetConversationId}.json`);
 
-      const agent = await stateService.getAgent(agentId);
-      const conversation = await stateService.getConversation(targetConversationId);
-      let responseText = `Message sent (${message.id}) to conversation ${targetConversationId}.`;
-      if ((agent?.profile.name == null) && conversation && conversation.participants.length >= 2) {
-        responseText += '\n\nReminder: your profile is not set. Use update_profile to set your name, role, expertise, and status so other participants can identify you.';
+      const maxContentionRetries = 5;
+      let lockAcquired = false;
+
+      for (let attempt = 0; attempt < maxContentionRetries; attempt++) {
+        const messageCountBefore = await getMessageCount(messagesPath);
+        const lockResult = await tryAcquireSendLock(lockDir, agentId);
+
+        if (lockResult.acquired) {
+          lockAcquired = true;
+          break;
+        }
+
+        const waitResult = await waitForSendLockRelease(lockDir);
+
+        if ('released' in waitResult) {
+          const competingMessages = await getMessagesSince(messagesPath, messageCountBefore);
+
+          if (competingMessages.length > 0) {
+            const allAgents = await stateService.getAgents();
+            const agentMap = new Map(allAgents.map((a) => [a.id, a]));
+
+            const messageLines = competingMessages.map((m) => {
+              const sender = agentMap.get(m.senderId);
+              const senderName = sender?.profile.name ?? m.senderId;
+              return `${senderName}: ${m.content}`;
+            });
+
+            const contentionResponse = [
+              `Conversation: ${targetConversationId}`,
+              '',
+              'Messages sent while you were preparing yours:',
+              ...messageLines,
+              '',
+              'One or more messages were sent to this conversation while you were preparing your message. Read them carefully, reconsider your original intent in light of what was said, and send a new message. Do NOT resend your original message verbatim.',
+            ].join('\n');
+
+            return { content: [{ type: 'text' as const, text: contentionResponse }], isError: true };
+          }
+        }
       }
-      return textResult(responseText);
+
+      if (!lockAcquired) {
+        const finalResult = await tryAcquireSendLock(lockDir, agentId);
+        if (!finalResult.acquired) {
+          return errorResult('Failed to acquire send lock after contention.');
+        }
+      }
+
+      try {
+        const message = await stateService.addMessage(targetConversationId, agentId, content, 'message');
+
+        const agent = await stateService.getAgent(agentId);
+        const conversation = await stateService.getConversation(targetConversationId);
+        let responseText = `Message sent (${message.id}) to conversation ${targetConversationId}.`;
+        if ((agent?.profile.name == null) && conversation && conversation.participants.length >= 2) {
+          responseText += '\n\nReminder: your profile is not set. Use update_profile to set your name, role, expertise, and status so other participants can identify you.';
+        }
+        return textResult(responseText);
+      } finally {
+        await releaseSendLock(lockDir);
+      }
     }
 
     case 'get_conversation': {

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_STALE_LOCK_AGE_MS = 10_000;
 const RETRY_INTERVAL_MS = 50;
-const LOCK_INFO_FILENAME = 'lock.info';
+export const LOCK_INFO_FILENAME = 'lock.info';
 
 interface LockInfo {
   pid: number;
@@ -38,7 +38,7 @@ async function writeLockInfo(lockPath: string): Promise<void> {
   await fs.writeFile(path.join(lockPath, LOCK_INFO_FILENAME), JSON.stringify(info), 'utf-8');
 }
 
-async function forceRemoveLock(lockPath: string): Promise<void> {
+export async function forceRemoveLock(lockPath: string): Promise<void> {
   try {
     await fs.unlink(path.join(lockPath, LOCK_INFO_FILENAME));
   } catch {

@@ -6,10 +6,10 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { GC_PROJECT_PATH, GC_POLL_INTERVAL_MS, GC_CLIENT_TYPE } from './constants/env.js';
-import { BASE_DIR } from './constants/storage.js';
 import { NotificationType } from './enums/notification-type.js';
 import { handleToolCall } from './services/tool-handlers.js';
 import { writeNotificationToParticipants, writeProfileSetupNotification } from './utils/notification-utils.js';
+import { sendLockDir, readSendLockInfo, releaseSendLock } from './utils/send-lock.js';
 import { toolDefinitions } from './schemas/tool-schemas.js';
 import { StateService } from './services/state-service.js';
 import { SessionStateService } from './services/session-state-service.js';
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   });
 
   if (GC_CLIENT_TYPE !== 'cursor') {
-    inboxPoller.start(agentId, GC_POLL_INTERVAL_MS, server, BASE_DIR);
+    inboxPoller.start(agentId, GC_POLL_INTERVAL_MS, server, stateService.baseDir);
   }
 
   const transport = new StdioServerTransport();
@@ -103,6 +103,14 @@ async function main(): Promise<void> {
     try {
       const currentAgent = await stateService.getAgent(currentAgentId);
       if (currentAgent) {
+        for (const convId of [...currentAgent.conversations]) {
+          const lockDir = sendLockDir(stateService.baseDir, convId);
+          const lockInfo = await readSendLockInfo(lockDir);
+          if (lockInfo && lockInfo.agentId === currentAgentId) {
+            await releaseSendLock(lockDir);
+          }
+        }
+
         for (const convId of [...currentAgent.conversations]) {
           try {
             const name = currentAgent.profile.name ?? currentAgentId;
