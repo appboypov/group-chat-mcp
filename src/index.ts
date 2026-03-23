@@ -104,10 +104,14 @@ async function main(): Promise<void> {
       const currentAgent = await stateService.getAgent(currentAgentId);
       if (currentAgent) {
         for (const convId of [...currentAgent.conversations]) {
-          const lockDir = sendLockDir(stateService.baseDir, convId);
-          const lockInfo = await readSendLockInfo(lockDir);
-          if (lockInfo && lockInfo.agentId === currentAgentId) {
-            await releaseSendLock(lockDir);
+          try {
+            const lockDir = sendLockDir(stateService.baseDir, convId);
+            const lockInfo = await readSendLockInfo(lockDir);
+            if (lockInfo && lockInfo.agentId === currentAgentId) {
+              await releaseSendLock(lockDir);
+            }
+          } catch (err: unknown) {
+            console.error(`Failed to release send lock for conversation ${convId}:`, err);
           }
         }
 

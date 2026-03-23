@@ -50,9 +50,18 @@ export async function tryAcquireSendLock(
   }
 
   const info: SendLockInfo = { pid: process.pid, agentId, timestamp: Date.now() };
-  await fs.writeFile(path.join(lockDir, LOCK_INFO_FILENAME), JSON.stringify(info), 'utf-8');
-  console.error('Send lock acquired for conversation');
-  return { acquired: true };
+  try {
+    await fs.writeFile(path.join(lockDir, LOCK_INFO_FILENAME), JSON.stringify(info), 'utf-8');
+    console.error('Send lock acquired for conversation');
+    return { acquired: true };
+  } catch (err) {
+    try {
+      await forceRemoveLock(lockDir);
+    } catch {
+      // Ignore cleanup errors; rethrow the original failure
+    }
+    throw err;
+  }
 }
 
 export async function waitForSendLockRelease(
@@ -104,8 +113,22 @@ export async function waitForSendLockRelease(
     return { released: true };
   }
 
-  console.error('Send lock released by holder');
-  return { released: true };
+  const dirStat = await fs.stat(lockDir).catch(() => null);
+  if (!dirStat) {
+    console.error('Send lock released by holder');
+    return { released: true };
+  }
+
+  const dirAgeMs = Date.now() - dirStat.mtimeMs;
+  const staleThresholdMs = timeoutMs;
+  if (dirAgeMs > staleThresholdMs) {
+    console.error('Stale send lock broken (metadata missing)');
+    await forceRemoveLock(lockDir);
+    return { released: true };
+  }
+
+  console.error('Send lock timeout reached');
+  return { timedOut: true };
 }
 
 export async function getMessagesSince(

@@ -183,7 +183,11 @@ export async function handleToolCall(
         }
         return textResult(responseText);
       } finally {
-        await releaseSendLock(lockDir);
+        try {
+          await releaseSendLock(lockDir);
+        } catch (lockError) {
+          console.error('Failed to release send lock', { lockDir, error: lockError });
+        }
       }
     }
 
