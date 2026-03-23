@@ -20,7 +20,7 @@ const sessionStateService = new SessionStateService();
 const inboxPoller = new InboxPollerService();
 
 const server = new Server(
-  { name: 'group-chat-mcp', version: '0.1.4' },
+  { name: 'group-chat-mcp', version: '0.1.6' },
   {
     capabilities: {
       experimental: { 'claude/channel': {} },

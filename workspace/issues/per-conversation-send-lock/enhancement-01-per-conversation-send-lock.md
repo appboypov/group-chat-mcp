@@ -2,7 +2,7 @@
 name: "🌱 Improve send_message to serialize sends per conversation via contention lock"
 type: enhancement
 order: "01"
-status: pending
+status: completed
 labels: ["type:enhancement", "team:tools", "level:senior"]
 parent: "none"
 dependencies: []

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-03-23
+
+### Added
+
+- Per-conversation send lock that serializes concurrent `send_message` calls within a conversation, returning competing messages with reconsideration instructions to blocked agents
+
+### Fixed
+
+- Send lock robustness: stale lock detection with process liveness checks, lock release on agent disconnect, and jittered poll intervals to prevent filesystem contention
+
 ## [0.1.5] - 2026-03-22
 
 ### Added
