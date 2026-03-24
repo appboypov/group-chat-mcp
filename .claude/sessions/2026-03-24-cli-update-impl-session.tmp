@@ -1,0 +1,91 @@
+# Session: 2026-03-24
+
+**Started:** ~late evening (after planning session)
+**Last Updated:** 2026-03-24
+**Project:** group-chat-mcp
+**Topic:** Implementing CLI update capability — all 4 issues from workspace/issues/cli-update-capability/
+
+---
+
+## What We Are Building
+
+A self-update system for the `gchat` CLI (the `group-chat-mcp` npm package). Two capabilities:
+
+1. Passive update notice: after interactive commands (`install`, `uninstall`), the CLI checks the npm registry in parallel and prints an update notice if a newer version exists. Cached for 24 hours.
+
+2. Manual update command: `gchat update` runs `npm install -g group-chat-mcp@latest`, then re-execs the newly installed binary with `gchat update --post-install` so the new version's installer logic refreshes all IDE configs. Install metadata (`~/.group-chat-mcp/install-meta.json`) tracks which IDE+scope combos were configured so the post-install knows what to refresh.
+
+---
+
+## What WORKED (with evidence)
+
+- **InstallMetadataService** — confirmed by: 9 unit tests pass, including idempotent add, remove-deletes-file, corrupt file handling, malformed entry filtering
+- **VersionCheckService** — confirmed by: 8 unit tests pass, including cache TTL, registry mock, corrupt cache, getLocalVersion via import.meta.url
+- **Update notice integration in main()** — confirmed by: version check fires in parallel before PromptUtils, notice prints after command completion, .catch(() => null) swallows failures. 4 tests pass.
+- **UpdateService (performUpdate + performPostInstall)** — confirmed by: 7 tests pass, including happy path with mocked execFileSync, already-up-to-date, null check result, empty metadata, metadata with entries
+- **parseCommand handles update and update --post-install** — confirmed by: 2 dedicated tests pass
+- **InstallerService integration** — confirmed by: install() calls addInstall after both ClaudeCode and Cursor paths; uninstall() uses try/finally for single removeInstall call
+- **Full test suite** — confirmed by: 154 tests pass across 16 files, 0 TypeScript errors
+- **Zero feedback markers** — confirmed by: grep found no remaining #FEEDBACK #TODO markers
+
+---
+
+## What Did NOT Work (and why)
+
+- **Vacuous update-notice tests** — first iteration tested JavaScript Promise semantics (resolving hand-crafted promises) instead of actual service behavior. Reviewer caught it. Fixed by removing the 3 vacuous tests and keeping only meaningful ones (formatUpdateNotice, .catch pattern, hook command bypass).
+- **process.execPath as gchat fallback** — resolves to the Node.js binary, not gchat. Re-exec would spawn `node update --post-install` which fails. Fixed by resolving via `fileURLToPath(import.meta.url)` to `../gchat.js`.
+- **Multiple removeInstall calls in uninstall()** — DRY violation with 6 calls across early-return paths. Fixed with try/finally wrapping the method body.
+
+---
+
+## What Has NOT Been Tried Yet
+
+- Manual end-to-end testing of `gchat update` against a real npm registry
+- Version bump to 0.2.0 (feature spec mentions this as the release slice)
+- Building (`npm run build`) and testing the compiled dist output
+
+---
+
+## Current State of Files
+
+| File | Status | Notes |
+|------|--------|-------|
+| `src/constants/storage.ts` | ✅ Complete | Added INSTALL_META_FILE, VERSION_CHECK_FILE, VERSION_CHECK_TTL_MS, NPM_REGISTRY_TIMEOUT_MS |
+| `src/services/install-metadata-service.ts` | ✅ Complete | New file — addInstall, removeInstall, getInstalls with entry validation |
+| `src/services/version-check-service.ts` | ✅ Complete | New file — checkForUpdate with 24h cache, npm registry query, getLocalVersion |
+| `src/services/update-service.ts` | ✅ Complete | New file — performUpdate (npm install + re-exec), performPostInstall (metadata-driven config refresh) |
+| `src/services/installer-service.ts` | ✅ Complete | Integrated InstallMetadataService — addInstall in install(), removeInstall via try/finally in uninstall() |
+| `src/utils/update-utils.ts` | ✅ Complete | New file — formatUpdateNotice |
+| `src/types/parsed-command.ts` | ✅ Complete | Added update and update-post-install variants |
+| `src/gchat.ts` | ✅ Complete | parseCommand handles update/update --post-install; main() has update handlers + version check in interactive block |
+| `src/__tests__/install-metadata-service.test.ts` | ✅ Complete | 9 tests — all Gherkin scenarios + malformed entry test |
+| `src/__tests__/version-check-service.test.ts` | ✅ Complete | 8 tests — all Gherkin scenarios |
+| `src/__tests__/update-notice.test.ts` | ✅ Complete | 4 tests — formatUpdateNotice, .catch pattern, hook command bypass |
+| `src/__tests__/update-service.test.ts` | ✅ Complete | 7 tests — parseCommand variants, performUpdate paths, performPostInstall paths |
+
+---
+
+## Decisions Made
+
+- **try/finally for uninstall metadata** — reason: single removeInstall call regardless of which early-return path executes; DRY
+- **Entry validation in readEntries** — reason: corrupt files with non-object entries (42, null, {ide: 123}) must not leak through as InstallEntry[]
+- **resolveGchatPath fallback via import.meta.url** — reason: process.execPath is the Node binary, not gchat; fileURLToPath resolves to the actual gchat.js script
+- **process.exit(0) after re-exec** — reason: explicitly terminate the old binary after the new one completes its post-install work
+- **console.error for update notice** — reason: keeps stdout clean; matches existing error output pattern in main()
+- **Removed vacuous tests** — reason: tests that spy on a local instance and assert the spy's return value test nothing; kept only tests that verify real behavior
+
+---
+
+## Blockers & Open Questions
+
+No active blockers. All 4 issues are fully implemented and passing.
+
+---
+
+## Exact Next Step
+
+The implementation is complete. Recommended next actions:
+1. Run `npm run build` to verify the TypeScript compiles to dist
+2. Manual smoke test: `gchat update` against the live npm registry
+3. Version bump to 0.2.0 per the feature spec
+4. Commit and create PR

@@ -11,3 +11,4 @@ export { ParsedCommand } from './parsed-command.js';
 export { ParsedError } from './parsed-error.js';
 export { ParseResult } from './parse-result.js';
 export { SessionState } from './session-state.js';
+export { VersionCheckResult } from './version-check-result.js';

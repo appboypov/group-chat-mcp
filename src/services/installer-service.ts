@@ -13,75 +13,83 @@ import {
 } from '../constants/settings-paths.js';
 import type { InstallOptions } from '../types/install-options.js';
 import type { UninstallOptions } from '../types/uninstall-options.js';
+import { InstallMetadataService } from './install-metadata-service.js';
 
 export class InstallerService {
+  private readonly installMetadata: InstallMetadataService;
+
+  constructor(installMetadata?: InstallMetadataService) {
+    this.installMetadata = installMetadata ?? new InstallMetadataService();
+  }
+
   async install(options: InstallOptions): Promise<void> {
     const serverPath = this.resolveServerPath();
 
     if (options.ide === IDE.ClaudeCode) {
       const scope = this.claudeCodeScope(options.scope);
       this.execClaudeCli(['mcp', 'add', 'group-chat-mcp', '--scope', scope, '--', 'node', serverPath]);
-      return;
-    }
+    } else {
+      // Cursor: JSON file approach
+      const settingsPath = this.resolveSettingsPath(options.ide, options.scope);
+      await fs.mkdir(path.dirname(settingsPath), { recursive: true });
+      const config = await this.readSettingsFile(settingsPath);
 
-    // Cursor: JSON file approach
-    const settingsPath = this.resolveSettingsPath(options.ide, options.scope);
-    await fs.mkdir(path.dirname(settingsPath), { recursive: true });
-    const config = await this.readSettingsFile(settingsPath);
-
-    if (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers)) {
-      config.mcpServers = {};
-    }
-
-    (config.mcpServers as Record<string, unknown>)['group-chat-mcp'] = {
-      command: 'node',
-      args: [serverPath],
-      env: {
-        GC_CLIENT_TYPE: 'cursor',
-      },
-    };
-
-    await this.writeAtomically(settingsPath, config);
-
-    // Hooks: write hooks.json
-    const hookScriptPath = this.resolveHookScriptPath();
-    const hooksPath = this.resolveHooksPath(options.ide, options.scope);
-    await fs.mkdir(path.dirname(hooksPath), { recursive: true });
-    const hooksConfig = await this.readSettingsFile(hooksPath);
-
-    if (!hooksConfig.version) {
-      hooksConfig.version = 1;
-    }
-
-    if (!hooksConfig.hooks || typeof hooksConfig.hooks !== 'object' || Array.isArray(hooksConfig.hooks)) {
-      hooksConfig.hooks = {};
-    }
-
-    const hooks = hooksConfig.hooks as Record<string, unknown[]>;
-    const hookCommand = `node "${hookScriptPath}"`;
-
-    const sessionStartEntry = { command: hookCommand, timeout: 10 };
-    const sessionEndEntry = { command: hookCommand, timeout: 5 };
-    const beforeMCPExecutionEntry = { command: hookCommand, timeout: 5, matcher: 'MCP:group-chat-mcp' };
-
-    const mergeHookEntries = (eventName: string, entry: Record<string, unknown>): void => {
-      if (!Array.isArray(hooks[eventName])) {
-        hooks[eventName] = [];
+      if (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers)) {
+        config.mcpServers = {};
       }
-      const arr = hooks[eventName] as Record<string, unknown>[];
-      const idx = arr.findIndex((e) => typeof e.command === 'string' && (e.command as string).includes('cursor-hook.js'));
-      if (idx >= 0) {
-        arr[idx] = entry;
-      } else {
-        arr.push(entry);
+
+      (config.mcpServers as Record<string, unknown>)['group-chat-mcp'] = {
+        command: 'node',
+        args: [serverPath],
+        env: {
+          GC_CLIENT_TYPE: 'cursor',
+        },
+      };
+
+      await this.writeAtomically(settingsPath, config);
+
+      // Hooks: write hooks.json
+      const hookScriptPath = this.resolveHookScriptPath();
+      const hooksPath = this.resolveHooksPath(options.ide, options.scope);
+      await fs.mkdir(path.dirname(hooksPath), { recursive: true });
+      const hooksConfig = await this.readSettingsFile(hooksPath);
+
+      if (!hooksConfig.version) {
+        hooksConfig.version = 1;
       }
-    };
 
-    mergeHookEntries('sessionStart', sessionStartEntry);
-    mergeHookEntries('sessionEnd', sessionEndEntry);
-    mergeHookEntries('beforeMCPExecution', beforeMCPExecutionEntry);
+      if (!hooksConfig.hooks || typeof hooksConfig.hooks !== 'object' || Array.isArray(hooksConfig.hooks)) {
+        hooksConfig.hooks = {};
+      }
 
-    await this.writeAtomically(hooksPath, hooksConfig);
+      const hooks = hooksConfig.hooks as Record<string, unknown[]>;
+      const hookCommand = `node "${hookScriptPath}"`;
+
+      const sessionStartEntry = { command: hookCommand, timeout: 10 };
+      const sessionEndEntry = { command: hookCommand, timeout: 5 };
+      const beforeMCPExecutionEntry = { command: hookCommand, timeout: 5, matcher: 'MCP:group-chat-mcp' };
+
+      const mergeHookEntries = (eventName: string, entry: Record<string, unknown>): void => {
+        if (!Array.isArray(hooks[eventName])) {
+          hooks[eventName] = [];
+        }
+        const arr = hooks[eventName] as Record<string, unknown>[];
+        const idx = arr.findIndex((e) => typeof e.command === 'string' && (e.command as string).includes('cursor-hook.js'));
+        if (idx >= 0) {
+          arr[idx] = entry;
+        } else {
+          arr.push(entry);
+        }
+      };
+
+      mergeHookEntries('sessionStart', sessionStartEntry);
+      mergeHookEntries('sessionEnd', sessionEndEntry);
+      mergeHookEntries('beforeMCPExecution', beforeMCPExecutionEntry);
+
+      await this.writeAtomically(hooksPath, hooksConfig);
+    }
+
+    await this.installMetadata.addInstall(options.ide, options.scope);
   }
 
   async uninstall(options: UninstallOptions): Promise<void> {
@@ -95,6 +103,7 @@ export class InstallerService {
           throw err;
         }
       }
+      await this.installMetadata.removeInstall(options.ide, options.scope);
       return;
     }
 
@@ -151,6 +160,7 @@ export class InstallerService {
     }
 
     await this.writeAtomically(hooksPath, hooksConfig);
+    await this.installMetadata.removeInstall(options.ide, options.scope);
   }
 
   resolveServerPath(): string {

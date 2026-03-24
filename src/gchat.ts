@@ -11,6 +11,9 @@ import { StateService } from './services/state-service.js';
 import { writeNotificationToParticipants, writeProfileSetupNotification } from './utils/notification-utils.js';
 import type { ParseResult } from './types/parse-result.js';
 import { PromptUtils } from './utils/prompt-utils.js';
+import { UpdateService } from './services/update-service.js';
+import { VersionCheckService } from './services/version-check-service.js';
+import { formatUpdateNotice } from './utils/update-utils.js';
 
 const installer = new InstallerService();
 
@@ -28,6 +31,13 @@ export function parseCommand(args: string[]): ParseResult {
 
   if (command === 'install' || command === 'uninstall') {
     return { command };
+  }
+
+  if (command === 'update') {
+    if (args.includes('--post-install')) {
+      return { command: 'update-post-install' };
+    }
+    return { command: 'update' };
   }
 
   if (command === 'cursor-join') {
@@ -117,7 +127,7 @@ export async function handleCursorLeave(
   await sessionStateService.clearSessionAgent(serverPid);
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const result = parseCommand(args);
 
@@ -127,6 +137,7 @@ async function main(): Promise<void> {
       console.error('Commands:');
       console.error('  install          Install group-chat-mcp into your IDE');
       console.error('  uninstall        Remove group-chat-mcp from your IDE');
+      console.error('  update           Update group-chat-mcp to the latest version');
       console.error('  cursor-join      Register an agent for a Cursor session');
       console.error('  cursor-leave     Unregister an agent for a Cursor session');
       process.exit(1);
@@ -136,7 +147,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     console.error(`Unknown command: ${args[0]}`);
-    console.error('Available commands: install, uninstall, cursor-join, cursor-leave');
+    console.error('Available commands: install, uninstall, update, cursor-join, cursor-leave');
     process.exit(1);
   }
 
@@ -150,6 +161,26 @@ async function main(): Promise<void> {
     await handleCursorLeave(result.serverPid);
     return;
   }
+
+  if (result.command === 'update') {
+    const updateService = new UpdateService();
+    try {
+      await updateService.performUpdate();
+      process.exit(0);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  }
+
+  if (result.command === 'update-post-install') {
+    const updateService = new UpdateService();
+    await updateService.performPostInstall();
+    return;
+  }
+
+  const versionCheck = new VersionCheckService();
+  const updateCheckPromise = versionCheck.checkForUpdate().catch(() => null);
 
   const prompt = new PromptUtils();
   try {
@@ -179,6 +210,11 @@ async function main(): Promise<void> {
           console.log(`✓ Uninstalled group-chat-mcp from ${ideName} (${scopeName}): ${settingsPath}`);
         }
       }
+    }
+
+    const updateResult = await updateCheckPromise;
+    if (updateResult?.updateAvailable) {
+      console.error(formatUpdateNotice(updateResult.current, updateResult.latest));
     }
   } finally {
     prompt.close();

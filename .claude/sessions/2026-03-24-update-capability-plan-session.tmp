@@ -1,0 +1,82 @@
+# Session: 2026-03-24
+
+**Started:** ~evening
+**Last Updated:** 2026-03-24
+**Project:** group-chat-mcp
+**Topic:** Planning CLI update capability — STEPS.md + issue decomposition
+
+---
+
+## What We Are Building
+
+A self-update system for the `gchat` CLI (the `group-chat-mcp` npm package). Two capabilities:
+
+1. Passive update notice: after interactive commands (`install`, `uninstall`), the CLI checks the npm registry in parallel and prints an update notice if a newer version exists. Cached for 24 hours.
+
+2. Manual update command: `gchat update` runs `npm install -g group-chat-mcp@latest`, then re-execs the newly installed binary with `gchat update --post-install` so the new version's installer logic refreshes all IDE configs. Install metadata (`~/.group-chat-mcp/install-meta.json`) tracks which IDE+scope combos were configured so the post-install knows what to refresh.
+
+Key design decisions: no auto-update, no version pinning, no interactive prompts, no notice on hook commands (cursor-join/cursor-leave output JSON), re-exec new binary for config refresh.
+
+---
+
+## What WORKED (with evidence)
+
+- **STEPS.md created and refined** — confirmed by: file exists at project root with 4 steps and 9 answered questions
+- **Issue decomposition completed** — confirmed by: 5 files exist in `workspace/issues/cli-update-capability/`
+
+---
+
+## What Did NOT Work (and why)
+
+No failed approaches yet.
+
+---
+
+## What Has NOT Been Tried Yet
+
+- Implementation of any issue
+- No code written yet — this was a planning-only session
+
+---
+
+## Current State of Files
+
+| File | Status | Notes |
+|------|--------|-------|
+| `STEPS.md` | ✅ Complete | 4 steps, 9 Q&As, end goal defined |
+| `workspace/issues/cli-update-capability/feature-00-cli-update-capability.md` | ✅ Complete | Feature parent spec with journeys, FRs, NFRs, scope |
+| `workspace/issues/cli-update-capability/business-logic-01A-install-metadata.md` | ✅ Complete | InstallMetadataService — persist/read/remove IDE+scope combos |
+| `workspace/issues/cli-update-capability/business-logic-01B-version-check.md` | ✅ Complete | VersionCheckService — npm registry query + 24h cache |
+| `workspace/issues/cli-update-capability/business-logic-02A-update-notice.md` | ✅ Complete | Integration into main() for interactive commands |
+| `workspace/issues/cli-update-capability/business-logic-02B-update-command.md` | ✅ Complete | UpdateService — npm install + re-exec + post-install |
+
+---
+
+## Decisions Made
+
+- **Notify only, no auto-update** — reason: mutating global state without consent is risky; user must explicitly run `gchat update`
+- **Interactive commands only for notice** — reason: hook commands (cursor-join, cursor-leave) output JSON to stdout; any extra output corrupts parsing
+- **24h cache for version check** — reason: avoids repeated npm registry calls; eliminates latency on consecutive runs
+- **Latest version only, no pinning** — reason: simplicity; covers 99% of use cases
+- **Persist install metadata in ~/.group-chat-mcp/install-meta.json** — reason: reliable detection of what to refresh; no fragile config scanning
+- **Re-exec new binary after npm install** — reason: running process has old code loaded; new binary must apply its own installer logic for config correctness
+- **Parallel version check, print after** — reason: no added latency to the primary command; standard CLI pattern (npm, Angular CLI)
+- **No full reinstall on update** — reason: the installer's merge logic is idempotent; re-applying it refreshes configs without clobbering unrelated settings
+
+---
+
+## Blockers & Open Questions
+
+No active blockers.
+
+---
+
+## Exact Next Step
+
+Start implementation. Wave 1 issues can run in parallel:
+- `business-logic-01A-install-metadata.md` — create InstallMetadataService + integrate into InstallerService
+- `business-logic-01B-version-check.md` — create VersionCheckService with npm registry query and caching
+
+After wave 1 completes, wave 2:
+- `business-logic-02A-update-notice.md` — integrate version check into main() for interactive commands
+- `business-logic-02B-update-command.md` — create UpdateService with npm install + re-exec flow

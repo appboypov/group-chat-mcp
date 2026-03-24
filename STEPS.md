@@ -1,43 +1,39 @@
 # End Goal
 
-Add a per-conversation message-sending lock that serializes sends within a conversation. When an agent attempts to send while another agent is already sending, the server waits internally until the competing message lands, then returns that message with strict instructions to reconsider and resend — never discarding the blocked agent's intent.
+Add manual and automatic update capabilities to the `gchat` CLI, allowing users to update the globally installed `group-chat-mcp` npm package on demand and be notified (or auto-updated) when a newer version is available.
 
 ## Steps
 
-- [ ] Add a per-conversation send lock to the state layer
-  - [ ] File-based lock per conversation (reusing the existing lock primitive pattern) that tracks the sending agent's ID
-  - [ ] 10-second stale threshold with automatic lock breaking and process liveness check
-- [ ] Integrate the lock into the send_message tool handler
-  - [ ] On lock contention: wait internally (poll) until the competing message lands
-  - [ ] On lock release: read the latest message(s) from the conversation file that arrived while waiting, return them with strict instructions to read, reconsider the original intent, and resend (do NOT echo the blocked agent's original message)
-  - [ ] On timeout: break the stale lock and proceed with the blocked agent's send normally
-- [ ] Handle lock cleanup on agent disconnect/crash to prevent deadlocks
+- [ ] Persist install metadata during `gchat install` so `gchat update` knows which IDE+scope combos to refresh
+- [ ] Add a version check mechanism that queries the npm registry for the latest published version, compares it to the locally installed version, and caches the result for 24 hours
+- [ ] Integrate the version check into interactive CLI commands (install, uninstall, update) to display an update notice when a newer version is available
+- [ ] Add a `gchat update` command that updates the globally installed package, then re-execs the new binary to refresh configs for all persisted IDE+scope combos
 
 ## Questions Answered
 
-1. Q: Should the send lock be scoped per-conversation or global?
-   A: Per-conversation. Agents can send to different conversations simultaneously, but only one at a time per conversation.
+1. Q: What should "automatic update" mean for gchat?
+   A: Notify only. On CLI invocation, check the npm registry in the background. If a newer version exists, print an update notice. No mutation without explicit user action via `gchat update`.
 
-2. Q: Should the server reject immediately or wait internally?
-   A: Wait internally until the competing message is sent, then return that message in the rejection response. This way the blocked agent immediately sees the message that beat it, can adjust its reply, and retry without waiting for a notification cycle.
+2. Q: Should the update notice appear on all commands or only interactive ones?
+   A: Interactive commands only (install, uninstall, update). Hook commands (cursor-join, cursor-leave) output JSON and must stay clean.
 
-3. Q: Should the blocked agent still receive the competing message via normal notifications?
-   A: Yes. The notification system stays unchanged. Duplicate exposure is acceptable and keeps the system simple.
+3. Q: Should the version check result be cached?
+   A: Yes. Cache for 24 hours in a local file. Skip the registry call if checked within that window.
 
-4. Q: How long should the blocked agent wait before timing out?
-   A: 10 seconds. Matches existing stale lock threshold. Normal sends complete in milliseconds.
+4. Q: Should `gchat update` support targeting a specific version?
+   A: No. Always install the latest published version.
 
-5. Q: What happens on timeout?
-   A: Break the stale lock and let the blocked agent send its message. Automatic recovery, no manual intervention.
+5. Q: Should `gchat update` re-run the installer after updating?
+   A: No full reinstall. After updating the npm package, detect which IDE configurations exist and apply incremental config patches (new files, updated files) without requiring the user to re-run `gchat install`.
 
-6. Q: Should the rejection response echo the blocked agent's original message?
-   A: No. Only return the competing message. The agent must reconsider its message in light of what the other agent said — that's the entire point of this feature. Echoing the original would tempt it to just resend without reconsidering.
+6. Q: How should config patching work?
+   A: Re-apply the current version's installer logic for all managed IDE+scope combos. The installer's merge logic is already idempotent — it updates existing entries without clobbering unrelated config.
 
-7. Q: When multiple agents are blocked on the same conversation, queue or race?
-   A: Race. All waiters re-contend when the lock releases. Losers wait again and see each subsequent competing message. Natural fit for file-based locks.
+7. Q: How should `gchat update` know which IDE+scope combos to refresh?
+   A: Persist install choices in a metadata file (e.g. `~/.group-chat-mcp/install-meta.json`) during `gchat install`. `gchat update` reads this file to determine what to refresh.
 
-8. Q: How should the blocked agent retrieve the competing message?
-   A: Read from the conversation's message file after the lock releases. Simple, uses existing data. In a multi-waiter race, each agent sees all messages sent since it started waiting.
+8. Q: Should the version check run in parallel with the main command or sequentially before it?
+   A: Parallel. Fire the registry check at command start, run the main command, print the update notice (if any) after the command completes. No added latency.
 
-9. Q: Should the send_message tool description be updated to document the lock behavior?
-   A: No. Discovery only. Agents learn about it when they hit contention via the rejection response.
+9. Q: After npm install replaces the binary, should the running (old) process refresh configs or re-exec the new binary?
+   A: Re-exec the new binary. After `npm install -g` completes, spawn `gchat update --post-install` using the newly installed binary. The new process runs the new version's installer logic, guaranteeing configs match the new version's expectations.
