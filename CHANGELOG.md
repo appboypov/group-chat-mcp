@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-24
+
+### Added
+
+- `gchat update` command: checks npm registry for the latest version, runs `npm install -g group-chat-mcp@latest`, and re-execs the new binary to refresh all previously installed IDE configurations
+- Passive update notice on interactive commands (`install`, `uninstall`) when a newer npm version exists
+- `InstallMetadataService` persists IDE+scope combos during install/uninstall so `gchat update` knows what to refresh
+- `VersionCheckService` with 24h file-cached npm registry queries and semver comparison
+- `formatUpdateNotice` utility for the update available message
+- `update` and `update-post-install` command variants in `ParsedCommand`
+- Unit and integration tests for all new services and update notice behavior
+
+### Changed
+
+- `InstallerService` accepts `InstallMetadataService` via constructor parameter (dependency injection)
+- `main()` exported from `gchat.ts` for testability
+- Help text updated with `update` command
+
 ## [0.1.6] - 2026-03-23
 
 ### Added

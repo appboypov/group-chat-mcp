@@ -2,7 +2,7 @@
 name: "⚙️ Update command with config refresh"
 type: business-logic
 order: "02B"
-status: pending
+status: completed
 labels: ["type:business-logic", "team:tools", "effort:average", "value:high"]
 parent: "feature-00-cli-update-capability.md"
 dependencies: ["business-logic-01A-install-metadata.md", "business-logic-01B-version-check.md"]

@@ -15,6 +15,8 @@ Multi-agent communication server using the Model Context Protocol. Enables AI ag
 - Pull-based inbox for clients without push notification support (`read_notifications`)
 - File-based shared state with atomic locking
 - Zero-config setup via `gchat install`
+- Built-in update command (`gchat update`) with automatic IDE config refresh
+- Passive update notices on interactive commands when a newer version is available
 
 ## Installation
 
@@ -47,6 +49,14 @@ The installer prompts for:
 - **Scope**: Global (all projects) or Local (current project only)
 
 For Claude Code, the installer registers the MCP server via `claude mcp add` (requires the Claude Code CLI on PATH). For Cursor, it writes `mcp.json` with the server entry and `hooks.json` with session lifecycle hooks that register and unregister agents per chat session.
+
+To update to the latest version:
+
+```bash
+gchat update
+```
+
+This checks the npm registry, installs the latest version, and refreshes all previously configured IDE setups. Interactive commands (`install`, `uninstall`) also display an update notice when a newer version is available.
 
 To remove the configuration:
 

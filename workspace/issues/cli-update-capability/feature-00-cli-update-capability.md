@@ -2,7 +2,7 @@
 name: "✨ CLI update capability"
 type: feature
 order: "00"
-status: pending
+status: completed
 labels: ["type:feature", "team:tools", "effort:average", "value:high"]
 parent: "none"
 dependencies: []
@@ -10,16 +10,16 @@ skills: ["project-management"]
 todos:
   - id: 01A
     content: "[01A] [business-logic] ⚙️ Install metadata service -> business-logic-01A-install-metadata.md"
-    status: pending
+    status: completed
   - id: 01B
     content: "[01B] [business-logic] ⚙️ Version check service -> business-logic-01B-version-check.md"
-    status: pending
+    status: completed
   - id: 02A
     content: "[02A] [business-logic] ⚙️ Update notice on interactive commands -> business-logic-02A-update-notice.md"
-    status: pending
+    status: completed
   - id: 02B
     content: "[02B] [business-logic] ⚙️ Update command with config refresh -> business-logic-02B-update-command.md"
-    status: pending
+    status: completed
 isProject: false
 ---
 

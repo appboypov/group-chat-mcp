@@ -2,7 +2,7 @@
 name: "⚙️ Update notice on interactive commands"
 type: business-logic
 order: "02A"
-status: pending
+status: completed
 labels: ["type:business-logic", "team:tools", "effort:minimum", "value:high"]
 parent: "feature-00-cli-update-capability.md"
 dependencies: ["business-logic-01B-version-check.md"]

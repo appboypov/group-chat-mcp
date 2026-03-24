@@ -2,7 +2,7 @@
 name: "⚙️ Version check service"
 type: business-logic
 order: "01B"
-status: pending
+status: completed
 labels: ["type:business-logic", "team:tools", "effort:low", "value:high"]
 parent: "feature-00-cli-update-capability.md"
 dependencies: []
